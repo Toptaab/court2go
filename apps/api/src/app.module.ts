@@ -11,6 +11,7 @@ import { AuthMemberModule } from './modules/auth-member/auth-member.module';
 import { MembersModule } from './modules/members/members.module';
 import { AvailabilityModule } from './modules/availability/availability.module';
 import { BookingsModule } from './modules/bookings/bookings.module';
+import { PaymentsModule } from './modules/payments/payments.module';
 
 /**
  * Root module. Feature modules (catalog, availability, auth, bookings,
@@ -30,6 +31,7 @@ import { BookingsModule } from './modules/bookings/bookings.module';
     MembersModule,
     AvailabilityModule,
     BookingsModule,
+    PaymentsModule,
   ],
   controllers: [HealthController],
   providers: [TenantsRepository, TenantContextMiddleware],

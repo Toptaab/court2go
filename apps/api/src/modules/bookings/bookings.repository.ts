@@ -262,30 +262,11 @@ export class BookingsRepository {
       }
 
       if (args.redeem) {
-        // Atomic total-cap guard: a single-statement conditional UPDATE closes
-        // the read-at-hold / increment-at-confirm TOCTOU — concurrent confirms
-        // racing the last use can never push `total_uses` past `max_total_uses`
-        // (the row lock serialises the `total_uses < max_total_uses` check).
-        // NOTE (carryover for prisma-data): the per-member cap
-        // (`max_uses_per_member`) still has NO hard DB backstop — a
-        // `(promotion_id, member_id)` partial unique on `promotion_redemption`
-        // is the real fix; resolve-time `countUsesByMember` remains best-effort.
-        const bumped = await tx.$executeRaw`
-          UPDATE "promotion"
-             SET "total_uses" = "total_uses" + 1
-           WHERE "id" = ${args.redeem.promotionId}::uuid
-             AND ("max_total_uses" IS NULL OR "total_uses" < "max_total_uses")`;
-        if (bumped === 0) {
-          throw new PromotionCapReachedError(args.redeem.promotionId);
-        }
-        await tx.promotionRedemption.create({
-          data: {
-            tenantId,
-            promotionId: args.redeem.promotionId,
-            bookingId: args.bookingId,
-            memberId: args.redeem.memberId,
-            discountAmount: args.redeem.discountAmount,
-          },
+        await this.redeemPromotionWithTx(tx, tenantId, {
+          promotionId: args.redeem.promotionId,
+          bookingId: args.bookingId,
+          memberId: args.redeem.memberId,
+          discountAmount: args.redeem.discountAmount,
         });
       }
 
@@ -298,6 +279,203 @@ export class BookingsRepository {
           amountDue: args.payment.amountDue,
         },
       });
+      return { booking, payment };
+    });
+  }
+
+  /**
+   * Atomic promotion redemption (M6 build note, ARCHITECTURE §6.2/§9)
+   * factored out so BOTH callers that redeem a promo at a booking's moment
+   * of Confirmation — `advanceOutOfVerification`'s Pay-Onsite branch (redeem
+   * at synchronous auto-confirm) and `confirmPayment`'s QR branch (redeem at
+   * admin slip-confirm, NOT at hold time) — share the exact same
+   * single-statement conditional-UPDATE cap guard. MUST be called from
+   * inside the caller's own `withTenant` transaction (`tx`), after that
+   * transaction has already won its status-guarded `updateMany` (so a losing
+   * concurrent caller never reaches here at all).
+   *
+   * Atomic total-cap guard: the single-statement conditional UPDATE closes
+   * the read-at-hold / increment-at-confirm TOCTOU — concurrent confirms
+   * racing the last use can never push `total_uses` past `max_total_uses`
+   * (the row lock serialises the `total_uses < max_total_uses` check).
+   * NOTE (carryover for prisma-data): the per-member cap
+   * (`max_uses_per_member`) still has NO hard DB backstop — a
+   * `(promotion_id, member_id)` partial unique on `promotion_redemption`
+   * is the real fix; resolve-time `countUsesByMember` remains best-effort.
+   */
+  private async redeemPromotionWithTx(
+    tx: TenantPrisma,
+    tenantId: string,
+    redeem: { promotionId: string; bookingId: string; memberId: string; discountAmount: number },
+  ): Promise<void> {
+    const bumped = await tx.$executeRaw`
+      UPDATE "promotion"
+         SET "total_uses" = "total_uses" + 1
+       WHERE "id" = ${redeem.promotionId}::uuid
+         AND ("max_total_uses" IS NULL OR "total_uses" < "max_total_uses")`;
+    if (bumped === 0) {
+      throw new PromotionCapReachedError(redeem.promotionId);
+    }
+    await tx.promotionRedemption.create({
+      data: {
+        tenantId,
+        promotionId: redeem.promotionId,
+        bookingId: redeem.bookingId,
+        memberId: redeem.memberId,
+        discountAmount: redeem.discountAmount,
+      },
+    });
+  }
+
+  /**
+   * Slip submission (PRD C3.1 AC2, ARCHITECTURE §5.2/§6.1) — the QR-branch
+   * counterpart of a status-guarded advance: Booking PENDING_PAYMENT →
+   * PENDING_PAYMENT_CONFIRMATION AND Payment AWAITING_SLIP_UPLOAD →
+   * SLIP_UPLOADED_PENDING_REVIEW, atomically, in ONE transaction. Grid stays
+   * reserved (neither status is in `RELEASING_STATUSES`). Status-guarded via
+   * `updateMany` exactly like `advanceOutOfVerification` — a losing
+   * concurrent call (e.g. a double-submit) is a no-op that returns the
+   * already-converged state rather than a raw constraint error.
+   */
+  async submitSlip(args: { bookingId: string; slipObjectKey: string }): Promise<{ booking: Booking; payment: Payment }> {
+    return this.prisma.withTenant(async (tx) => {
+      const advanced = await tx.booking.updateMany({
+        where: { id: args.bookingId, status: 'PENDING_PAYMENT' },
+        data: { status: 'PENDING_PAYMENT_CONFIRMATION' },
+      });
+      if (advanced.count === 0) {
+        const booking = await tx.booking.findUniqueOrThrow({ where: { id: args.bookingId } });
+        const payment = await tx.payment.findUniqueOrThrow({ where: { bookingId: args.bookingId } });
+        return { booking, payment };
+      }
+
+      const slipUpdate = await tx.payment.updateMany({
+        where: { bookingId: args.bookingId, status: 'AWAITING_SLIP_UPLOAD' },
+        data: {
+          status: 'SLIP_UPLOADED_PENDING_REVIEW',
+          slipObjectKey: args.slipObjectKey,
+          slipUploadedAt: new Date(),
+        },
+      });
+      // Defense-in-depth on the money path: the booking just advanced, so the
+      // paired Payment MUST have been AWAITING_SLIP_UPLOAD. If it wasn't, the
+      // slip key would never be recorded while the booking silently moved to
+      // PENDING_PAYMENT_CONFIRMATION — throw to roll the whole transaction back
+      // rather than leave that split state (unreachable given the service-layer
+      // `assertPaymentTransition`, but never trust that alone here).
+      if (slipUpdate.count === 0) {
+        throw new Error(`submitSlip: booking ${args.bookingId} advanced but Payment was not AWAITING_SLIP_UPLOAD`);
+      }
+
+      const booking = await tx.booking.findUniqueOrThrow({ where: { id: args.bookingId } });
+      const payment = await tx.payment.findUniqueOrThrow({ where: { bookingId: args.bookingId } });
+      return { booking, payment };
+    });
+  }
+
+  /**
+   * Admin payment confirm (PRD A2.3 AC2 / A2.2 AC3, ARCHITECTURE §6) — the
+   * SOLE additional code path (alongside `advanceOutOfVerification`'s
+   * Pay-Onsite branch) allowed to set `booking.status = CONFIRMED`. Covers
+   * BOTH: slip review (PENDING_PAYMENT_CONFIRMATION → CONFIRMED) and a
+   * direct/walk-in confirm with no slip (PENDING_PAYMENT → CONFIRMED,
+   * ARCHITECTURE §6.1 diagram). One `withTenant` transaction:
+   *   1. status-guarded Booking update (no-op / converged-state return if
+   *      the booking is no longer in a confirmable status — mirrors
+   *      `advanceOutOfVerification`'s race handling);
+   *   2. IF the booking carries an applied promotion, redeem it HERE (not at
+   *      hold time) via the shared `redeemPromotionWithTx` — this is the
+   *      QR-branch promo redemption moment (M7 build note: Pay-Onsite redeems
+   *      at synchronous auto-confirm in `advanceOutOfVerification`; QR redeems
+   *      here, at admin confirm, never earlier);
+   *   3. Payment → CONFIRMED with `reviewedByAdminId`/`reviewedAt`/`note`.
+   * Grid stays reserved (CONFIRMED is not in `RELEASING_STATUSES`).
+   */
+  async confirmPayment(args: {
+    bookingId: string;
+    adminId: string;
+    note?: string;
+  }): Promise<{ booking: Booking; payment: Payment }> {
+    const tenantId = getTenantId();
+    return this.prisma.withTenant(async (tx) => {
+      const advanced = await tx.booking.updateMany({
+        where: { id: args.bookingId, status: { in: ['PENDING_PAYMENT', 'PENDING_PAYMENT_CONFIRMATION'] } },
+        data: { status: 'CONFIRMED' },
+      });
+      if (advanced.count === 0) {
+        const booking = await tx.booking.findUniqueOrThrow({ where: { id: args.bookingId } });
+        const payment = await tx.payment.findUniqueOrThrow({ where: { bookingId: args.bookingId } });
+        return { booking, payment };
+      }
+
+      const booking = await tx.booking.findUniqueOrThrow({ where: { id: args.bookingId } });
+
+      if (booking.appliedPromotionId && booking.promotionDiscountAmount != null) {
+        await this.redeemPromotionWithTx(tx, tenantId, {
+          promotionId: booking.appliedPromotionId,
+          bookingId: args.bookingId,
+          memberId: booking.memberId,
+          discountAmount: booking.promotionDiscountAmount,
+        });
+      }
+
+      const payment = await tx.payment.update({
+        where: { bookingId: args.bookingId },
+        data: {
+          status: 'CONFIRMED',
+          reviewedByAdminId: args.adminId,
+          reviewedAt: new Date(),
+          // A confirm always clears any stale rejection reason. The admin `note`
+          // itself is captured on the audit row by the service, not on Payment.
+          rejectionReason: null,
+        },
+      });
+
+      return { booking, payment };
+    });
+  }
+
+  /**
+   * Admin slip reject (PRD A2.3 AC3, ARCHITECTURE §5.2/§6) — Booking
+   * PENDING_PAYMENT_CONFIRMATION → REJECTED (releasing the `booking_slot`
+   * rows, same as `transitionStatus`'s `RELEASING_STATUSES` handling) AND
+   * Payment → REJECTED with `reviewedByAdminId`/`reviewedAt`/`rejectionReason`,
+   * atomically in ONE transaction. Status-guarded the same way as
+   * `confirmPayment` — a booking no longer in `PENDING_PAYMENT_CONFIRMATION`
+   * is a no-op that returns the converged state.
+   */
+  async rejectPayment(args: {
+    bookingId: string;
+    adminId: string;
+    reason: string;
+  }): Promise<{ booking: Booking; payment: Payment }> {
+    return this.prisma.withTenant(async (tx) => {
+      const advanced = await tx.booking.updateMany({
+        where: { id: args.bookingId, status: 'PENDING_PAYMENT_CONFIRMATION' },
+        data: { status: 'REJECTED' },
+      });
+      if (advanced.count === 0) {
+        const booking = await tx.booking.findUniqueOrThrow({ where: { id: args.bookingId } });
+        const payment = await tx.payment.findUniqueOrThrow({ where: { bookingId: args.bookingId } });
+        return { booking, payment };
+      }
+
+      await tx.bookingSlot.updateMany({
+        where: { bookingId: args.bookingId, releasedAt: null },
+        data: { releasedAt: new Date() },
+      });
+
+      const booking = await tx.booking.findUniqueOrThrow({ where: { id: args.bookingId } });
+      const payment = await tx.payment.update({
+        where: { bookingId: args.bookingId },
+        data: {
+          status: 'REJECTED',
+          reviewedByAdminId: args.adminId,
+          reviewedAt: new Date(),
+          rejectionReason: args.reason,
+        },
+      });
+
       return { booking, payment };
     });
   }
