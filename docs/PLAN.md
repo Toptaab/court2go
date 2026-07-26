@@ -19,7 +19,7 @@ Shipped as `@repo/domain`: `grid.ts` (`isGridAligned`, `gridStartMinutes`, `maxS
 
 **Carried flag for M6 (schema owner, `packages/types`):** `timeOfDaySchema` permits a court `openTime` off the :00/:30 lattice (e.g. 08:15), which would push the fixed 30-min lock lattice off-grid (ARCHITECTURE §5.1/§5.4 silent-double-book risk). `validateBookingSelection` now rejects off-lattice starts (`OFF_LATTICE`) as defense-in-depth, but `openTime` should additionally be constrained to 30-min alignment at the schema/data layer before M6 consumes holds.
 
-## M4 — Availability ⬜
+## M4 — Availability 🟡
 `courts/{id}/availability` — per-court grid, active booking_slot reads, court schedule/blocks, peak ranges → free/taken grid.
 
 ## M5 — Member auth (OTP stub + LINE) ⬜
