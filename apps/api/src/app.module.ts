@@ -4,6 +4,7 @@ import { PrismaModule } from './prisma/prisma.module';
 import { TenantContextMiddleware } from './common/tenant-context.middleware';
 import { TenantsRepository } from './modules/tenants/tenants.repository';
 import { HealthController } from './modules/health/health.controller';
+import { PublicModule } from './modules/public/public.module';
 
 /**
  * Root module. Feature modules (catalog, availability, auth, bookings,
@@ -15,6 +16,7 @@ import { HealthController } from './modules/health/health.controller';
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
     PrismaModule,
+    PublicModule,
   ],
   controllers: [HealthController],
   providers: [TenantsRepository, TenantContextMiddleware],

@@ -7,8 +7,10 @@ Legend: ✅ done · 🟡 in progress · ⬜ not started
 ## M1 — NestJS bootstrap ✅
 Bootable API skeleton: deps, `main.ts`, `AppModule`, `PrismaModule`, tenant-context middleware, global exception filter (error envelope), zod validation pipe, `/health`. Verifiable: `GET /health` 200, `GET /` boots, DB connects.
 
-## M2 — Public catalog (read) ⬜
-`tenant` resolve by slug, `branches`, `branches/{id}/sports`, `.../courts`, `courts/{id}`, `news`. Pure reads through repositories → DTO mapping. First real tenant-scoped endpoints (RLS exercised).
+## M2 — Public catalog (read) ✅
+`tenant` resolve by slug, `branches`, `branches/{id}/sports`, `.../courts`, `courts/{id}`, `news` (paginated). Reads through repositories → public DTO mappers (`PublicModule`). RLS exercised end-to-end against seed. Verified: full catalog chain 200, inactive/unknown court 404, no `promptPayId`/draft leak.
+
+Infra fixed en route: `tsconfig-paths` + ts-node `moduleTypes` cjs override to consume ESM `@repo/types` source under a CommonJS Nest app.
 
 ## M3 — packages/domain (pricing + grid) ⬜
 Grid/slot validation, mixed peak/base price breakdown, 30-min lattice expansion, hold TTL. Pure functions, unit-tested. Consumed by availability + bookings.

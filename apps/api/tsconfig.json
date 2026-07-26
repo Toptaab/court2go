@@ -3,6 +3,11 @@
     "target": "ES2022",
     "module": "CommonJS",
     "moduleResolution": "node",
+    "baseUrl": ".",
+    "paths": {
+      "@repo/types": ["../../packages/types/src/index.ts"],
+      "@repo/types/enums": ["../../packages/types/src/enums/index.ts"]
+    },
     "lib": ["ES2022"],
     "strict": true,
     "esModuleInterop": true,
@@ -16,5 +21,17 @@
     "sourceMap": true
   },
   "include": ["src/**/*.ts", "prisma/seed.ts"],
-  "exclude": ["node_modules", "dist", "**/*.spec.ts"]
+  "exclude": ["node_modules", "dist", "**/*.spec.ts"],
+  // @repo/types is authored ESM (its own package.json is type:module) but
+  // apps/api is CommonJS. The tsconfig `paths` above map @repo/types to its
+  // .ts source; without this, ts-node compiles those files as ESM and a CJS
+  // require() throws ERR_REQUIRE_ESM. moduleTypes forces the workspace source
+  // to CJS in dev. (tsx can't replace ts-node here: esbuild drops
+  // emitDecoratorMetadata, which breaks Nest DI.)
+  "ts-node": {
+    "transpileOnly": true,
+    "moduleTypes": {
+      "../../packages/types/src/**/*": "cjs"
+    }
+  }
 }
