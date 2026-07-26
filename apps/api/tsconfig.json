@@ -6,7 +6,8 @@
     "baseUrl": ".",
     "paths": {
       "@repo/types": ["../../packages/types/src/index.ts"],
-      "@repo/types/enums": ["../../packages/types/src/enums/index.ts"]
+      "@repo/types/enums": ["../../packages/types/src/enums/index.ts"],
+      "@repo/domain": ["../../packages/domain/src/index.ts"]
     },
     "lib": ["ES2022"],
     "strict": true,
@@ -31,7 +32,8 @@
   "ts-node": {
     "transpileOnly": true,
     "moduleTypes": {
-      "../../packages/types/src/**/*": "cjs"
+      "../../packages/types/src/**/*": "cjs",
+      "../../packages/domain/src/**/*": "cjs"
     }
   }
 }

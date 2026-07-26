@@ -12,8 +12,12 @@ Bootable API skeleton: deps, `main.ts`, `AppModule`, `PrismaModule`, tenant-cont
 
 Infra fixed en route: `tsconfig-paths` + ts-node `moduleTypes` cjs override to consume ESM `@repo/types` source under a CommonJS Nest app.
 
-## M3 — packages/domain (pricing + grid) ⬜
+## M3 — packages/domain (pricing + grid) ✅
 Grid/slot validation, mixed peak/base price breakdown, 30-min lattice expansion, hold TTL. Pure functions, unit-tested. Consumed by availability + bookings.
+
+Shipped as `@repo/domain`: `grid.ts` (`isGridAligned`, `gridStartMinutes`, `maxSlotsFromStart`, `latticeUnitsForBooking`, `expandToLattice`, `validateBookingSelection`), `pricing.ts` (`isPeakAtStart`, `priceForGridUnit`, `computePriceBreakdown` — output satisfies `priceBreakdownSchema`, drop-in for `CreateHoldInput`), `hold.ts` (`computeHoldExpiry`, `isHoldExpired`, `remainingHoldMs`). All types reused from `@repo/types` (no redefinition). Jest wired for the workspace (root `test`/`typecheck` fan-out); the previously-queued `apps/api` `prisma-errors` P2002 classifier spec now runs green (7 tests) — no longer queued. 51 domain unit tests pass incl. the PRD A5.1 AC10 worked example; reviewer clean.
+
+**Carried flag for M6 (schema owner, `packages/types`):** `timeOfDaySchema` permits a court `openTime` off the :00/:30 lattice (e.g. 08:15), which would push the fixed 30-min lock lattice off-grid (ARCHITECTURE §5.1/§5.4 silent-double-book risk). `validateBookingSelection` now rejects off-lattice starts (`OFF_LATTICE`) as defense-in-depth, but `openTime` should additionally be constrained to 30-min alignment at the schema/data layer before M6 consumes holds.
 
 ## M4 — Availability ⬜
 `courts/{id}/availability` — per-court grid, active booking_slot reads, court schedule/blocks, peak ranges → free/taken grid.
