@@ -8,6 +8,7 @@ import { PublicModule } from './modules/public/public.module';
 import { IntegrationsModule } from './integrations/integrations.module';
 import { AuthMemberModule } from './modules/auth-member/auth-member.module';
 import { MembersModule } from './modules/members/members.module';
+import { AvailabilityModule } from './modules/availability/availability.module';
 
 /**
  * Root module. Feature modules (catalog, availability, auth, bookings,
@@ -23,6 +24,7 @@ import { MembersModule } from './modules/members/members.module';
     PublicModule,
     AuthMemberModule,
     MembersModule,
+    AvailabilityModule,
   ],
   controllers: [HealthController],
   providers: [TenantsRepository, TenantContextMiddleware],
