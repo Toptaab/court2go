@@ -6,6 +6,10 @@
   "type": "commonjs",
   "scripts": {
     "postinstall": "prisma generate",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/main.js",
+    "start:dev": "DOTENV_CONFIG_PATH=../../.env TS_NODE_TRANSPILE_ONLY=1 node -r dotenv/config -r ts-node/register src/main.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
     "prisma:validate": "prisma validate",
     "prisma:generate": "prisma generate",
     "prisma:migrate:dev": "prisma migrate dev",
@@ -15,16 +19,27 @@
   },
   "dependencies": {
     "@nestjs/common": "^11.1.6",
+    "@nestjs/config": "^4.0.2",
+    "@nestjs/core": "^11.1.6",
+    "@nestjs/platform-express": "^11.1.6",
+    "@nestjs/schedule": "^6.0.0",
     "@prisma/adapter-pg": "7.9.0",
     "@prisma/client": "7.9.0",
+    "@repo/types": "*",
+    "cookie-parser": "^1.4.7",
+    "express": "^5.0.0",
     "pg": "8.22.0",
-    "reflect-metadata": "^0.2.2"
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.1"
   },
   "devDependencies": {
+    "@types/cookie-parser": "^1.4.8",
+    "@types/express": "^5.0.0",
     "@types/node": "^20.14.0",
     "@types/pg": "8.20.0",
     "dotenv": "^17.4.2",
     "prisma": "7.9.0",
+    "ts-node": "^10.9.2",
     "tsx": "^4.19.2",
     "typescript": "^5.5.4"
   }
