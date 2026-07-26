@@ -1,0 +1,1651 @@
+openapi: 3.1.0
+info:
+  title: court2go API
+  version: 1.0.0
+  description: >
+    Multi-tenant court/venue booking SaaS. This spec is kept aligned with the
+    authoritative zod schemas in `packages/types` (ARCHITECTURE §3.1/§7); if they
+    disagree, `packages/types` wins. Money is integer THB satang. Bookings take a
+    `slotCount` (1..maxSlots), never a duration. Every endpoint is tenant-scoped.
+  contact:
+    name: court2go api-designer
+
+servers:
+  - url: /v1
+
+tags:
+  - name: tenant
+  - name: news
+  - name: catalog (public)
+  - name: availability
+  - name: booking (client)
+  - name: payment (client)
+  - name: auth (member)
+  - name: profile
+  - name: line
+  - name: auth (admin)
+  - name: admin bookings
+  - name: admin catalog
+  - name: admin promotions
+  - name: admin news
+  - name: admin members
+  - name: admin config
+  - name: admin users
+
+security:
+  - memberSession: []
+
+paths:
+  # ============================================================ Tenant / news
+  /tenants/by-slug/{slug}:
+    get:
+      tags: [tenant]
+      summary: Resolve a tenant by public slug (bootstrap for the public shell)
+      security: []
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema: { $ref: '#/components/schemas/Slug' }
+      responses:
+        '200':
+          description: Public tenant bootstrap
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PublicTenant' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /news:
+    get:
+      tags: [news]
+      summary: Public news feed (published only, newest first)
+      security: [{ tenantHeader: [] }]
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: Paginated published news
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/PaginatedEnvelope'
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items: { $ref: '#/components/schemas/PublicNews' }
+
+  /news/{newsId}:
+    get:
+      tags: [news]
+      security: [{ tenantHeader: [] }]
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - { name: newsId, in: path, required: true, schema: { $ref: '#/components/schemas/Id' } }
+      responses:
+        '200':
+          description: Published news item
+          content: { application/json: { schema: { $ref: '#/components/schemas/PublicNews' } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # ============================================================ Public catalog
+  /branches:
+    get:
+      tags: [catalog (public)]
+      summary: Active branches for the tenant
+      security: [{ tenantHeader: [] }]
+      parameters: [{ $ref: '#/components/parameters/TenantHeader' }]
+      responses:
+        '200':
+          description: Active branches
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/PublicBranch' } }
+
+  /branches/{branchId}/sports:
+    get:
+      tags: [catalog (public)]
+      summary: Sports with ≥1 active court in this branch
+      security: [{ tenantHeader: [] }]
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - { name: branchId, in: path, required: true, schema: { $ref: '#/components/schemas/Id' } }
+      responses:
+        '200':
+          description: Sports
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/PublicSport' } }
+
+  /branches/{branchId}/sports/{sportId}/courts:
+    get:
+      tags: [catalog (public)]
+      security: [{ tenantHeader: [] }]
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - { name: branchId, in: path, required: true, schema: { $ref: '#/components/schemas/Id' } }
+        - { name: sportId, in: path, required: true, schema: { $ref: '#/components/schemas/Id' } }
+      responses:
+        '200':
+          description: Courts
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/PublicCourt' } }
+
+  /courts/{courtId}:
+    get:
+      tags: [catalog (public)]
+      security: [{ tenantHeader: [] }]
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - $ref: '#/components/parameters/CourtId'
+      responses:
+        '200':
+          description: Court
+          content: { application/json: { schema: { $ref: '#/components/schemas/PublicCourt' } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /courts/{courtId}/availability:
+    get:
+      tags: [availability]
+      summary: Selectable start times + max slot counts for a court on a date
+      description: >
+        Grid computed at the court's grid interval. A start is selectable only if
+        all underlying 30-min lattice units are free (internal lattice not exposed).
+      security: [{ tenantHeader: [] }]
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - $ref: '#/components/parameters/CourtId'
+        - { name: date, in: query, required: true, schema: { $ref: '#/components/schemas/IsoDate' } }
+      responses:
+        '200':
+          description: Availability
+          content: { application/json: { schema: { $ref: '#/components/schemas/AvailabilityResponse' } } }
+
+  # ============================================================ Client booking
+  /courts/{courtId}/holds:
+    post:
+      tags: [booking (client)]
+      summary: Create a hold ({ start, slotCount }) — reserves the grid units
+      security: [{ memberSession: [] }, { tenantHeader: [] }]
+      parameters:
+        - $ref: '#/components/parameters/TenantHeader'
+        - $ref: '#/components/parameters/CourtId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateHoldBody' }
+      responses:
+        '201':
+          description: Hold created
+          content: { application/json: { schema: { $ref: '#/components/schemas/CreateHoldResponse' } } }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409':
+          description: A lattice unit was taken concurrently (SLOT_UNAVAILABLE) or hold rules violated
+          content: { application/json: { schema: { $ref: '#/components/schemas/ErrorEnvelope' } } }
+
+  /bookings/{bookingId}:
+    get:
+      tags: [booking (client)]
+      security: [{ memberSession: [] }]
+      parameters: [{ $ref: '#/components/parameters/BookingId' }]
+      responses:
+        '200':
+          description: Booking detail
+          content: { application/json: { schema: { $ref: '#/components/schemas/BookingDetail' } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /bookings/{bookingId}/promotion:
+    post:
+      tags: [booking (client)]
+      summary: Apply / re-apply a promo code to a hold
+      security: [{ memberSession: [] }]
+      parameters: [{ $ref: '#/components/parameters/BookingId' }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/ApplyPromoBody' } } }
+      responses:
+        '200': { description: Updated booking, content: { application/json: { schema: { $ref: '#/components/schemas/BookingDetail' } } } }
+        '409':
+          description: PROMO_NOT_APPLICABLE
+          content: { application/json: { schema: { $ref: '#/components/schemas/ErrorEnvelope' } } }
+    delete:
+      tags: [booking (client)]
+      summary: Remove the applied promo
+      security: [{ memberSession: [] }]
+      parameters: [{ $ref: '#/components/parameters/BookingId' }]
+      responses:
+        '200': { description: Updated booking, content: { application/json: { schema: { $ref: '#/components/schemas/BookingDetail' } } } }
+
+  /bookings/{bookingId}/cancellation-request:
+    post:
+      tags: [booking (client)]
+      summary: Request cancellation (>2h before start; admin approves)
+      security: [{ memberSession: [] }]
+      parameters: [{ $ref: '#/components/parameters/BookingId' }]
+      requestBody:
+        content: { application/json: { schema: { $ref: '#/components/schemas/CancellationRequestBody' } } }
+      responses:
+        '200': { description: Booking → CANCELLATION_REQUESTED, content: { application/json: { schema: { $ref: '#/components/schemas/BookingDetail' } } } }
+        '409':
+          description: CANCELLATION_CUTOFF_PASSED or invalid state
+          content: { application/json: { schema: { $ref: '#/components/schemas/ErrorEnvelope' } } }
+
+  /me/bookings:
+    get:
+      tags: [booking (client)]
+      summary: Current member's bookings
+      security: [{ memberSession: [] }]
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+        - { name: status, in: query, schema: { $ref: '#/components/schemas/BookingStatus' } }
+        - { name: scope, in: query, schema: { type: string, enum: [upcoming, past, all], default: all } }
+      responses:
+        '200':
+          description: Paginated bookings
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/PaginatedEnvelope'
+                  - type: object
+                    properties:
+                      items: { type: array, items: { $ref: '#/components/schemas/BookingListItem' } }
+
+  # ============================================================ Client payment
+  /bookings/{bookingId}/payment:
+    get:
+      tags: [payment (client)]
+      summary: Payment detail (QR branch includes dynamic PromptPay QR)
+      security: [{ memberSession: [] }]
+      parameters: [{ $ref: '#/components/parameters/BookingId' }]
+      responses:
+        '200': { description: Payment, content: { application/json: { schema: { $ref: '#/components/schemas/Payment' } } } }
+
+  /bookings/{bookingId}/payment/slip-upload-url:
+    post:
+      tags: [payment (client)]
+      summary: Presigned PUT URL for the slip image (binary goes straight to storage)
+      security: [{ memberSession: [] }]
+      parameters: [{ $ref: '#/components/parameters/BookingId' }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/SlipUploadUrlBody' } } }
+      responses:
+        '200': { description: Presigned URL, content: { application/json: { schema: { $ref: '#/components/schemas/SlipUploadUrlResponse' } } } }
+        '409':
+          description: HOLD_EXPIRED or wrong branch/state
+          content: { application/json: { schema: { $ref: '#/components/schemas/ErrorEnvelope' } } }
+
+  /bookings/{bookingId}/payment/slip:
+    post:
+      tags: [payment (client)]
+      summary: Confirm slip uploaded → PENDING_PAYMENT_CONFIRMATION
+      security: [{ memberSession: [] }]
+      parameters: [{ $ref: '#/components/parameters/BookingId' }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/ConfirmSlipBody' } } }
+      responses:
+        '200': { description: Updated booking, content: { application/json: { schema: { $ref: '#/components/schemas/BookingDetail' } } } }
+
+  # ============================================================ Member auth
+  /auth/otp/request:
+    post:
+      tags: [auth (member)]
+      summary: Request an SMS OTP (LOGIN or BIND)
+      security: [{ tenantHeader: [] }]
+      parameters: [{ $ref: '#/components/parameters/TenantHeader' }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/OtpRequestBody' } } }
+      responses:
+        '200': { description: Challenge issued, content: { application/json: { schema: { $ref: '#/components/schemas/OtpRequestResponse' } } } }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '429':
+          description: OTP_RATE_LIMITED
+          content: { application/json: { schema: { $ref: '#/components/schemas/ErrorEnvelope' } } }
+
+  /auth/otp/verify:
+    post:
+      tags: [auth (member)]
+      summary: Verify OTP → establish/renew member session (Set-Cookie)
+      security: [{ tenantHeader: [] }]
+      parameters: [{ $ref: '#/components/parameters/TenantHeader' }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/OtpVerifyBody' } } }
+      responses:
+        '200':
+          description: Session established
+          headers:
+            Set-Cookie: { schema: { type: string }, description: c2g_member_session=... }
+          content: { application/json: { schema: { $ref: '#/components/schemas/MemberSessionResponse' } } }
+        '401':
+          description: OTP_INVALID / OTP_EXPIRED / OTP_MAX_ATTEMPTS
+          content: { application/json: { schema: { $ref: '#/components/schemas/ErrorEnvelope' } } }
+
+  /auth/line/login-url:
+    post:
+      tags: [auth (member)]
+      summary: Get LINE OAuth authorization URL
+      security: [{ tenantHeader: [] }]
+      parameters: [{ $ref: '#/components/parameters/TenantHeader' }]
+      responses:
+        '200': { description: URL, content: { application/json: { schema: { $ref: '#/components/schemas/LineLoginUrlResponse' } } } }
+
+  /auth/line/callback:
+    post:
+      tags: [auth (member)]
+      summary: Exchange LINE auth code → member session (Set-Cookie)
+      security: [{ tenantHeader: [] }]
+      parameters: [{ $ref: '#/components/parameters/TenantHeader' }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/LineCallbackBody' } } }
+      responses:
+        '200':
+          description: Session established
+          content: { application/json: { schema: { $ref: '#/components/schemas/MemberSessionResponse' } } }
+
+  /auth/logout:
+    post:
+      tags: [auth (member)]
+      security: [{ memberSession: [] }]
+      responses: { '204': { description: Logged out } }
+
+  /me:
+    get:
+      tags: [profile]
+      security: [{ memberSession: [] }]
+      responses:
+        '200': { description: Current member, content: { application/json: { schema: { $ref: '#/components/schemas/Me' } } } }
+    patch:
+      tags: [profile]
+      summary: Update optional profile fields (phone change goes via OTP BIND)
+      security: [{ memberSession: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/UpdateProfileBody' } } }
+      responses:
+        '200': { description: Updated, content: { application/json: { schema: { $ref: '#/components/schemas/Me' } } } }
+
+  /integrations/line/link-url:
+    post:
+      tags: [line]
+      summary: Signed URL to bind LINE OA for notifications
+      security: [{ memberSession: [] }]
+      responses:
+        '200': { description: Link URL, content: { application/json: { schema: { $ref: '#/components/schemas/LineOaLinkUrlResponse' } } } }
+
+  /webhooks/line:
+    post:
+      tags: [line]
+      summary: LINE webhook (public; verifies x-line-signature)
+      security: []
+      responses: { '200': { description: Acknowledged } }
+
+  # ============================================================ Admin auth
+  /admin/auth/login:
+    post:
+      tags: [auth (admin)]
+      summary: Admin email+password login (Set-Cookie)
+      security: []
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/AdminLoginBody' } } }
+      responses:
+        '200':
+          description: Session established
+          headers: { Set-Cookie: { schema: { type: string }, description: c2g_admin_session=... } }
+          content: { application/json: { schema: { $ref: '#/components/schemas/AdminSessionResponse' } } }
+        '401':
+          description: ADMIN_CREDENTIALS_INVALID
+          content: { application/json: { schema: { $ref: '#/components/schemas/ErrorEnvelope' } } }
+
+  /admin/auth/logout:
+    post:
+      tags: [auth (admin)]
+      security: [{ adminSession: [] }]
+      responses: { '204': { description: Logged out } }
+
+  /admin/me:
+    get:
+      tags: [auth (admin)]
+      security: [{ adminSession: [] }]
+      responses:
+        '200': { description: Current admin, content: { application/json: { schema: { $ref: '#/components/schemas/AdminUser' } } } }
+
+  # ============================================================ Admin bookings
+  /admin/bookings:
+    get:
+      tags: [admin bookings]
+      summary: Filterable booking list (branch-scoped for Branch Admin)
+      security: [{ adminSession: [] }]
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+        - { name: branchId, in: query, schema: { $ref: '#/components/schemas/Id' } }
+        - { name: sportId, in: query, schema: { $ref: '#/components/schemas/Id' } }
+        - { name: courtId, in: query, schema: { $ref: '#/components/schemas/Id' } }
+        - { name: status, in: query, schema: { $ref: '#/components/schemas/BookingStatus' } }
+        - { name: paymentStatus, in: query, schema: { $ref: '#/components/schemas/PaymentStatus' } }
+        - { name: dateFrom, in: query, schema: { $ref: '#/components/schemas/IsoDate' } }
+        - { name: dateTo, in: query, schema: { $ref: '#/components/schemas/IsoDate' } }
+        - { name: phone, in: query, schema: { type: string } }
+      responses:
+        '200':
+          description: Paginated bookings
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/PaginatedEnvelope'
+                  - type: object
+                    properties:
+                      items: { type: array, items: { $ref: '#/components/schemas/BookingListItem' } }
+    post:
+      tags: [admin bookings]
+      summary: Walk-in booking (no OTP; auditable override)
+      security: [{ adminSession: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/AdminCreateBookingBody' } } }
+      responses:
+        '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/BookingDetail' } } } }
+        '409':
+          description: SLOT_UNAVAILABLE or DUPLICATE_MEMBER
+          content: { application/json: { schema: { $ref: '#/components/schemas/ErrorEnvelope' } } }
+
+  /admin/bookings/calendar:
+    get:
+      tags: [admin bookings]
+      summary: One branch, one date — bookings for the calendar grid
+      security: [{ adminSession: [] }]
+      parameters:
+        - { name: branchId, in: query, required: true, schema: { $ref: '#/components/schemas/Id' } }
+        - { name: date, in: query, required: true, schema: { $ref: '#/components/schemas/IsoDate' } }
+      responses:
+        '200':
+          description: Bookings
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/BookingListItem' } }
+
+  /admin/bookings/{bookingId}:
+    get:
+      tags: [admin bookings]
+      security: [{ adminSession: [] }]
+      parameters: [{ $ref: '#/components/parameters/BookingId' }]
+      responses:
+        '200': { description: Detail, content: { application/json: { schema: { $ref: '#/components/schemas/BookingDetail' } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    patch:
+      tags: [admin bookings]
+      summary: Modify time/court/slotCount (atomic; 409 rolls back)
+      security: [{ adminSession: [] }]
+      parameters: [{ $ref: '#/components/parameters/BookingId' }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/AdminModifyBookingBody' } } }
+      responses:
+        '200': { description: Updated, content: { application/json: { schema: { $ref: '#/components/schemas/BookingDetail' } } } }
+        '409':
+          description: SLOT_UNAVAILABLE
+          content: { application/json: { schema: { $ref: '#/components/schemas/ErrorEnvelope' } } }
+
+  /admin/bookings/{bookingId}/cancel:
+    post:
+      tags: [admin bookings]
+      security: [{ adminSession: [] }]
+      parameters: [{ $ref: '#/components/parameters/BookingId' }]
+      requestBody:
+        content: { application/json: { schema: { $ref: '#/components/schemas/AdminCancelBookingBody' } } }
+      responses:
+        '200': { description: Cancelled, content: { application/json: { schema: { $ref: '#/components/schemas/BookingDetail' } } } }
+
+  /admin/bookings/{bookingId}/outcome:
+    post:
+      tags: [admin bookings]
+      summary: Mark COMPLETED / NO_SHOW
+      security: [{ adminSession: [] }]
+      parameters: [{ $ref: '#/components/parameters/BookingId' }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/AdminSetBookingOutcomeBody' } } }
+      responses:
+        '200': { description: Updated, content: { application/json: { schema: { $ref: '#/components/schemas/BookingDetail' } } } }
+
+  /admin/bookings/{bookingId}/payment/confirm:
+    post:
+      tags: [admin bookings]
+      summary: Confirm payment (slip or direct) → Booking CONFIRMED
+      security: [{ adminSession: [] }]
+      parameters: [{ $ref: '#/components/parameters/BookingId' }]
+      requestBody:
+        content: { application/json: { schema: { $ref: '#/components/schemas/AdminConfirmPaymentBody' } } }
+      responses:
+        '200': { description: Confirmed, content: { application/json: { schema: { $ref: '#/components/schemas/BookingDetail' } } } }
+        '409':
+          description: INVALID_STATE_TRANSITION (e.g. Pay-Onsite booking)
+          content: { application/json: { schema: { $ref: '#/components/schemas/ErrorEnvelope' } } }
+
+  /admin/bookings/{bookingId}/payment/reject:
+    post:
+      tags: [admin bookings]
+      summary: Reject slip → Booking REJECTED, grid released
+      security: [{ adminSession: [] }]
+      parameters: [{ $ref: '#/components/parameters/BookingId' }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/AdminRejectPaymentBody' } } }
+      responses:
+        '200': { description: Rejected, content: { application/json: { schema: { $ref: '#/components/schemas/BookingDetail' } } } }
+
+  /admin/bookings/{bookingId}/payment/slip-url:
+    get:
+      tags: [admin bookings]
+      summary: Short-lived signed GET URL for the slip image
+      security: [{ adminSession: [] }]
+      parameters: [{ $ref: '#/components/parameters/BookingId' }]
+      responses:
+        '200': { description: Signed URL, content: { application/json: { schema: { $ref: '#/components/schemas/SlipViewUrlResponse' } } } }
+
+  /admin/bookings/{bookingId}/cancellation-decision:
+    post:
+      tags: [admin bookings]
+      summary: Approve / decline a client cancellation request
+      security: [{ adminSession: [] }]
+      parameters: [{ $ref: '#/components/parameters/BookingId' }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/AdminCancellationDecisionBody' } } }
+      responses:
+        '200': { description: Updated, content: { application/json: { schema: { $ref: '#/components/schemas/BookingDetail' } } } }
+
+  # ============================================================ Admin catalog (branch/sport/court)
+  /admin/branches:
+    get:
+      tags: [admin catalog]
+      security: [{ adminSession: [] }]
+      responses:
+        '200': { description: Branches, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/Branch' } } } } }
+    post:
+      tags: [admin catalog]
+      security: [{ adminSession: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/UpsertBranchBody' } } } }
+      responses:
+        '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/Branch' } } } }
+
+  /admin/branches/{id}:
+    parameters: [{ $ref: '#/components/parameters/ResourceId' }]
+    get:
+      tags: [admin catalog]
+      security: [{ adminSession: [] }]
+      responses: { '200': { description: Branch, content: { application/json: { schema: { $ref: '#/components/schemas/Branch' } } } } }
+    patch:
+      tags: [admin catalog]
+      security: [{ adminSession: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/UpsertBranchBody' } } } }
+      responses: { '200': { description: Updated, content: { application/json: { schema: { $ref: '#/components/schemas/Branch' } } } } }
+    delete:
+      tags: [admin catalog]
+      summary: Soft-delete (409 if future bookings exist)
+      security: [{ adminSession: [] }]
+      responses:
+        '200': { description: Soft-deleted, content: { application/json: { schema: { $ref: '#/components/schemas/LifecycleResult' } } } }
+        '409': { $ref: '#/components/responses/SoftDeleteBlocked' }
+
+  /admin/branches/{id}/deactivate:
+    post:
+      tags: [admin catalog]
+      security: [{ adminSession: [] }]
+      parameters: [{ $ref: '#/components/parameters/ResourceId' }]
+      responses: { '200': { description: Deactivated, content: { application/json: { schema: { $ref: '#/components/schemas/LifecycleResult' } } } } }
+
+  /admin/sports:
+    get:
+      tags: [admin catalog]
+      security: [{ adminSession: [] }]
+      responses: { '200': { description: Sports, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/Sport' } } } } } }
+    post:
+      tags: [admin catalog]
+      security: [{ adminSession: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/UpsertSportBody' } } } }
+      responses: { '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/Sport' } } } } }
+
+  /admin/sports/{id}:
+    parameters: [{ $ref: '#/components/parameters/ResourceId' }]
+    patch:
+      tags: [admin catalog]
+      security: [{ adminSession: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/UpsertSportBody' } } } }
+      responses: { '200': { description: Updated, content: { application/json: { schema: { $ref: '#/components/schemas/Sport' } } } } }
+    delete:
+      tags: [admin catalog]
+      security: [{ adminSession: [] }]
+      responses:
+        '200': { description: Soft-deleted, content: { application/json: { schema: { $ref: '#/components/schemas/LifecycleResult' } } } }
+        '409': { $ref: '#/components/responses/SoftDeleteBlocked' }
+
+  /admin/sports/{id}/deactivate:
+    post:
+      tags: [admin catalog]
+      security: [{ adminSession: [] }]
+      parameters: [{ $ref: '#/components/parameters/ResourceId' }]
+      responses: { '200': { description: Deactivated, content: { application/json: { schema: { $ref: '#/components/schemas/LifecycleResult' } } } } }
+
+  /admin/courts:
+    get:
+      tags: [admin catalog]
+      security: [{ adminSession: [] }]
+      parameters: [{ name: branchId, in: query, schema: { $ref: '#/components/schemas/Id' } }]
+      responses: { '200': { description: Courts, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/Court' } } } } } }
+    post:
+      tags: [admin catalog]
+      security: [{ adminSession: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/UpsertCourtBody' } } } }
+      responses:
+        '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/Court' } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /admin/courts/{id}:
+    parameters: [{ $ref: '#/components/parameters/ResourceId' }]
+    get:
+      tags: [admin catalog]
+      security: [{ adminSession: [] }]
+      responses: { '200': { description: Court, content: { application/json: { schema: { $ref: '#/components/schemas/Court' } } } } }
+    patch:
+      tags: [admin catalog]
+      security: [{ adminSession: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/UpsertCourtBody' } } } }
+      responses: { '200': { description: Updated, content: { application/json: { schema: { $ref: '#/components/schemas/Court' } } } } }
+    delete:
+      tags: [admin catalog]
+      security: [{ adminSession: [] }]
+      responses:
+        '200': { description: Soft-deleted, content: { application/json: { schema: { $ref: '#/components/schemas/LifecycleResult' } } } }
+        '409': { $ref: '#/components/responses/SoftDeleteBlocked' }
+
+  /admin/courts/{id}/deactivate:
+    post:
+      tags: [admin catalog]
+      security: [{ adminSession: [] }]
+      parameters: [{ $ref: '#/components/parameters/ResourceId' }]
+      responses: { '200': { description: Deactivated, content: { application/json: { schema: { $ref: '#/components/schemas/LifecycleResult' } } } } }
+
+  /admin/courts/{id}/blocks:
+    get:
+      tags: [admin catalog]
+      security: [{ adminSession: [] }]
+      parameters: [{ $ref: '#/components/parameters/ResourceId' }]
+      responses: { '200': { description: Blocks, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/CourtBlock' } } } } } }
+    post:
+      tags: [admin catalog]
+      security: [{ adminSession: [] }]
+      parameters: [{ $ref: '#/components/parameters/ResourceId' }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/CreateCourtBlockBody' } } } }
+      responses: { '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/CourtBlock' } } } } }
+
+  /admin/courts/{id}/blocks/{blockId}:
+    delete:
+      tags: [admin catalog]
+      security: [{ adminSession: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+        - { name: blockId, in: path, required: true, schema: { $ref: '#/components/schemas/Id' } }
+      responses: { '204': { description: Removed } }
+
+  # ============================================================ Admin promotions
+  /admin/promotions:
+    get:
+      tags: [admin promotions]
+      security: [{ adminSession: [] }]
+      responses: { '200': { description: Promotions, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/Promotion' } } } } } }
+    post:
+      tags: [admin promotions]
+      security: [{ adminSession: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/UpsertPromotionBody' } } } }
+      responses: { '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/Promotion' } } } } }
+
+  /admin/promotions/{id}:
+    parameters: [{ $ref: '#/components/parameters/ResourceId' }]
+    patch:
+      tags: [admin promotions]
+      security: [{ adminSession: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/UpsertPromotionBody' } } } }
+      responses: { '200': { description: Updated, content: { application/json: { schema: { $ref: '#/components/schemas/Promotion' } } } } }
+    delete:
+      tags: [admin promotions]
+      security: [{ adminSession: [] }]
+      responses: { '200': { description: Soft-deleted, content: { application/json: { schema: { $ref: '#/components/schemas/LifecycleResult' } } } } }
+
+  /admin/promotions/{id}/deactivate:
+    post:
+      tags: [admin promotions]
+      security: [{ adminSession: [] }]
+      parameters: [{ $ref: '#/components/parameters/ResourceId' }]
+      responses: { '200': { description: Deactivated, content: { application/json: { schema: { $ref: '#/components/schemas/LifecycleResult' } } } } }
+
+  /admin/promotions/{id}/usage:
+    get:
+      tags: [admin promotions]
+      security: [{ adminSession: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: Usage rows
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/PaginatedEnvelope'
+                  - type: object
+                    properties:
+                      items: { type: array, items: { $ref: '#/components/schemas/PromotionUsageItem' } }
+
+  # ============================================================ Admin news
+  /admin/news:
+    get:
+      tags: [admin news]
+      security: [{ adminSession: [] }]
+      parameters: [{ $ref: '#/components/parameters/Page' }, { $ref: '#/components/parameters/PageSize' }]
+      responses:
+        '200':
+          description: News
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/PaginatedEnvelope'
+                  - type: object
+                    properties:
+                      items: { type: array, items: { $ref: '#/components/schemas/News' } }
+    post:
+      tags: [admin news]
+      security: [{ adminSession: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/UpsertNewsBody' } } } }
+      responses: { '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/News' } } } } }
+
+  /admin/news/{id}:
+    parameters: [{ $ref: '#/components/parameters/ResourceId' }]
+    patch:
+      tags: [admin news]
+      security: [{ adminSession: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/UpsertNewsBody' } } } }
+      responses: { '200': { description: Updated, content: { application/json: { schema: { $ref: '#/components/schemas/News' } } } } }
+    delete:
+      tags: [admin news]
+      security: [{ adminSession: [] }]
+      responses: { '204': { description: Deleted } }
+
+  # ============================================================ Admin members
+  /admin/members:
+    get:
+      tags: [admin members]
+      security: [{ adminSession: [] }]
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+        - { name: q, in: query, schema: { type: string } }
+      responses:
+        '200':
+          description: Members
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/PaginatedEnvelope'
+                  - type: object
+                    properties:
+                      items: { type: array, items: { $ref: '#/components/schemas/MemberAdminView' } }
+
+  /admin/members/{id}:
+    get:
+      tags: [admin members]
+      security: [{ adminSession: [] }]
+      parameters: [{ $ref: '#/components/parameters/ResourceId' }]
+      responses: { '200': { description: Member, content: { application/json: { schema: { $ref: '#/components/schemas/MemberAdminView' } } } } }
+
+  /admin/members/{id}/bookings:
+    get:
+      tags: [admin members]
+      security: [{ adminSession: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: Member bookings
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/PaginatedEnvelope'
+                  - type: object
+                    properties:
+                      items: { type: array, items: { $ref: '#/components/schemas/BookingListItem' } }
+
+  /admin/members/{id}/block:
+    post:
+      tags: [admin members]
+      security: [{ adminSession: [] }]
+      parameters: [{ $ref: '#/components/parameters/ResourceId' }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/AdminBlockMemberBody' } } } }
+      responses: { '200': { description: Updated, content: { application/json: { schema: { $ref: '#/components/schemas/MemberAdminView' } } } } }
+
+  # ============================================================ Admin config / branding / uploads
+  /admin/config:
+    get:
+      tags: [admin config]
+      security: [{ adminSession: [] }]
+      responses: { '200': { description: Config, content: { application/json: { schema: { $ref: '#/components/schemas/Config' } } } } }
+    put:
+      tags: [admin config]
+      security: [{ adminSession: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/Config' } } } }
+      responses: { '200': { description: Updated, content: { application/json: { schema: { $ref: '#/components/schemas/Config' } } } } }
+
+  /admin/branding:
+    get:
+      tags: [admin config]
+      security: [{ adminSession: [] }]
+      responses: { '200': { description: Branding, content: { application/json: { schema: { $ref: '#/components/schemas/Branding' } } } } }
+    put:
+      tags: [admin config]
+      security: [{ adminSession: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/Branding' } } } }
+      responses: { '200': { description: Updated, content: { application/json: { schema: { $ref: '#/components/schemas/Branding' } } } } }
+
+  /admin/uploads/image-url:
+    post:
+      tags: [admin config]
+      summary: Presigned PUT for public images (logo/news)
+      security: [{ adminSession: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ImageUploadUrlBody' } } } }
+      responses: { '200': { description: Presigned URL, content: { application/json: { schema: { $ref: '#/components/schemas/ImageUploadUrlResponse' } } } } }
+
+  # ============================================================ Admin users / roles
+  /admin/admin-users:
+    get:
+      tags: [admin users]
+      security: [{ adminSession: [] }]
+      responses: { '200': { description: Admin users, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/AdminUser' } } } } } }
+    post:
+      tags: [admin users]
+      summary: Create Admin / Branch Admin (OWNER/ADMIN only)
+      security: [{ adminSession: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/CreateAdminUserBody' } } } }
+      responses:
+        '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/AdminUser' } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /admin/admin-users/{id}:
+    parameters: [{ $ref: '#/components/parameters/ResourceId' }]
+    patch:
+      tags: [admin users]
+      security: [{ adminSession: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/UpdateAdminUserBody' } } } }
+      responses: { '200': { description: Updated, content: { application/json: { schema: { $ref: '#/components/schemas/AdminUser' } } } } }
+    delete:
+      tags: [admin users]
+      summary: Remove (403 OWNER_IMMUTABLE / FORBIDDEN per ADR-0005)
+      security: [{ adminSession: [] }]
+      responses:
+        '204': { description: Removed }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /admin/roles-matrix:
+    get:
+      tags: [admin users]
+      security: [{ adminSession: [] }]
+      responses: { '200': { description: Roles matrix, content: { application/json: { schema: { $ref: '#/components/schemas/RolesMatrix' } } } } }
+
+components:
+  securitySchemes:
+    memberSession:
+      type: apiKey
+      in: cookie
+      name: c2g_member_session
+    adminSession:
+      type: apiKey
+      in: cookie
+      name: c2g_admin_session
+    tenantHeader:
+      type: apiKey
+      in: header
+      name: X-Tenant-Id
+
+  parameters:
+    TenantHeader:
+      name: X-Tenant-Id
+      in: header
+      required: true
+      description: Tenant id resolved by the web middleware from the URL slug (public flows only).
+      schema: { $ref: '#/components/schemas/Id' }
+    Page: { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
+    PageSize: { name: pageSize, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
+    CourtId: { name: courtId, in: path, required: true, schema: { $ref: '#/components/schemas/Id' } }
+    BookingId: { name: bookingId, in: path, required: true, schema: { $ref: '#/components/schemas/Id' } }
+    ResourceId: { name: id, in: path, required: true, schema: { $ref: '#/components/schemas/Id' } }
+
+  responses:
+    ValidationError:
+      description: VALIDATION_ERROR (field-level details)
+      content: { application/json: { schema: { $ref: '#/components/schemas/ErrorEnvelope' } } }
+    Forbidden:
+      description: FORBIDDEN / BRANCH_SCOPE_DENIED / PHONE_NOT_VERIFIED / MEMBER_BLOCKED
+      content: { application/json: { schema: { $ref: '#/components/schemas/ErrorEnvelope' } } }
+    NotFound:
+      description: NOT_FOUND / TENANT_NOT_FOUND
+      content: { application/json: { schema: { $ref: '#/components/schemas/ErrorEnvelope' } } }
+    SoftDeleteBlocked:
+      description: SOFT_DELETE_BLOCKED_FUTURE_BOOKINGS
+      content: { application/json: { schema: { $ref: '#/components/schemas/ErrorEnvelope' } } }
+
+  schemas:
+    # -------- scalars
+    Id: { type: string, format: uuid }
+    Slug: { type: string, pattern: '^[a-z0-9]+(?:-[a-z0-9]+)*$' }
+    ThaiPhone: { type: string, pattern: '^0\d{9}$' }
+    ThbAmount: { type: integer, minimum: 0, description: THB minor units (satang). }
+    IsoDateTime: { type: string, format: date-time }
+    IsoDate: { type: string, pattern: '^\d{4}-\d{2}-\d{2}$' }
+    TimeOfDay: { type: string, pattern: '^(?:[01]\d|2[0-3]):[0-5]\d$|^24:00$' }
+    HexColor: { type: string, pattern: '^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$' }
+
+    # -------- enums
+    BookingStatus:
+      type: string
+      enum: [PENDING_VERIFICATION, PENDING_PAYMENT, PENDING_PAYMENT_CONFIRMATION, CONFIRMED, CANCELLATION_REQUESTED, REJECTED, EXPIRED, CANCELLED, COMPLETED, NO_SHOW]
+    PaymentStatus:
+      type: string
+      enum: [AWAITING_SLIP_UPLOAD, SLIP_UPLOADED_PENDING_REVIEW, CONFIRMED, REJECTED, PAY_ONSITE_NOT_COLLECTED]
+    BranchPaymentMethod: { type: string, enum: [PAY_ONSITE, QR_CODE] }
+    Role: { type: string, enum: [OWNER, ADMIN, BRANCH_ADMIN] }
+    Sex: { type: string, enum: [MALE, FEMALE, OTHER] }
+    OtpPurpose: { type: string, enum: [LOGIN, BIND] }
+    VerifiedVia: { type: string, enum: [SELF_OTP, ADMIN_OVERRIDE] }
+    DiscountType: { type: string, enum: [PERCENTAGE, FIXED] }
+    NewsStatus: { type: string, enum: [DRAFT, PUBLISHED] }
+    GridIntervalMinutes: { type: integer, enum: [30, 60, 90, 120] }
+    DayOfWeek: { type: string, enum: [MON, TUE, WED, THU, FRI, SAT, SUN] }
+
+    # -------- error / pagination
+    ErrorEnvelope:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code: { type: string }
+            message: { type: string }
+            details: {}
+    PaginatedEnvelope:
+      type: object
+      required: [items, page, pageSize, total, hasNextPage]
+      properties:
+        items: { type: array, items: {} }
+        page: { type: integer }
+        pageSize: { type: integer }
+        total: { type: integer }
+        hasNextPage: { type: boolean }
+
+    # -------- tenant / branding / config
+    Branding:
+      type: object
+      required: [logoUrl, primaryColor, secondaryColor]
+      properties:
+        logoUrl: { type: [string, 'null'], format: uri }
+        primaryColor: { oneOf: [{ $ref: '#/components/schemas/HexColor' }, { type: 'null' }] }
+        secondaryColor: { oneOf: [{ $ref: '#/components/schemas/HexColor' }, { type: 'null' }] }
+    Config:
+      type: object
+      required: [holdWindowMinutes, clientSessionDurationDays, otpExpiryMinutes, otpMaxAttempts, otpResendCooldownSeconds, otpMaxSendsPerHour, minBookingLeadTimeMinutes, maxAdvanceBookingDays, cancellationCutoffHours, defaultGridIntervalMinutes, defaultMaxSlots]
+      properties:
+        holdWindowMinutes: { type: integer, enum: [5, 10] }
+        clientSessionDurationDays: { type: integer, minimum: 1, maximum: 365 }
+        otpExpiryMinutes: { type: integer, minimum: 1, maximum: 30 }
+        otpMaxAttempts: { type: integer, minimum: 1, maximum: 10 }
+        otpResendCooldownSeconds: { type: integer, minimum: 0, maximum: 600 }
+        otpMaxSendsPerHour: { type: integer, minimum: 1, maximum: 50 }
+        minBookingLeadTimeMinutes: { type: integer, minimum: 0 }
+        maxAdvanceBookingDays: { type: integer, minimum: 1, maximum: 365 }
+        cancellationCutoffHours: { type: integer, minimum: 0 }
+        defaultGridIntervalMinutes: { $ref: '#/components/schemas/GridIntervalMinutes' }
+        defaultMaxSlots: { type: integer, minimum: 1 }
+    PublicTenant:
+      type: object
+      required: [id, slug, name, branding, publicConfig]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        slug: { $ref: '#/components/schemas/Slug' }
+        name: { type: string }
+        branding: { $ref: '#/components/schemas/Branding' }
+        publicConfig:
+          type: object
+          required: [holdWindowMinutes, minBookingLeadTimeMinutes, maxAdvanceBookingDays, cancellationCutoffHours]
+          properties:
+            holdWindowMinutes: { type: integer, enum: [5, 10] }
+            minBookingLeadTimeMinutes: { type: integer }
+            maxAdvanceBookingDays: { type: integer }
+            cancellationCutoffHours: { type: integer }
+
+    # -------- branch / sport / court
+    BusinessHoursDay:
+      type: object
+      required: [day, closed, openTime, closeTime]
+      properties:
+        day: { $ref: '#/components/schemas/DayOfWeek' }
+        closed: { type: boolean }
+        openTime: { oneOf: [{ $ref: '#/components/schemas/TimeOfDay' }, { type: 'null' }] }
+        closeTime: { oneOf: [{ $ref: '#/components/schemas/TimeOfDay' }, { type: 'null' }] }
+    Branch:
+      type: object
+      required: [id, name, address, paymentMethod, promptPayId, businessHours, isActive, createdAt]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        name: { type: string }
+        address: { type: string }
+        paymentMethod: { $ref: '#/components/schemas/BranchPaymentMethod' }
+        promptPayId: { type: [string, 'null'] }
+        businessHours: { type: array, items: { $ref: '#/components/schemas/BusinessHoursDay' }, minItems: 7, maxItems: 7 }
+        isActive: { type: boolean }
+        createdAt: { $ref: '#/components/schemas/IsoDateTime' }
+    PublicBranch:
+      type: object
+      required: [id, name, address, paymentMethod]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        name: { type: string }
+        address: { type: string }
+        paymentMethod: { $ref: '#/components/schemas/BranchPaymentMethod' }
+    Sport:
+      type: object
+      required: [id, name, isActive, createdAt]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        name: { type: string }
+        isActive: { type: boolean }
+        createdAt: { $ref: '#/components/schemas/IsoDateTime' }
+    PublicSport:
+      type: object
+      required: [id, name]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        name: { type: string }
+    CourtScheduleDay:
+      type: object
+      required: [day, closed, openTime, closeTime]
+      properties:
+        day: { $ref: '#/components/schemas/DayOfWeek' }
+        closed: { type: boolean }
+        openTime: { oneOf: [{ $ref: '#/components/schemas/TimeOfDay' }, { type: 'null' }] }
+        closeTime: { oneOf: [{ $ref: '#/components/schemas/TimeOfDay' }, { type: 'null' }] }
+    PeakTimeRange:
+      type: object
+      required: [id, label, days, startTime, endTime, pricePerGridUnit]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        label: { type: [string, 'null'] }
+        days: { type: array, items: { $ref: '#/components/schemas/DayOfWeek' }, minItems: 1 }
+        startTime: { $ref: '#/components/schemas/TimeOfDay' }
+        endTime: { $ref: '#/components/schemas/TimeOfDay' }
+        pricePerGridUnit: { $ref: '#/components/schemas/ThbAmount' }
+    Court:
+      type: object
+      required: [id, branchId, sportId, name, gridIntervalMinutes, maxSlots, basePricePerGridUnit, peakTimeRanges, schedule, isActive, createdAt]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        branchId: { $ref: '#/components/schemas/Id' }
+        sportId: { $ref: '#/components/schemas/Id' }
+        name: { type: string }
+        gridIntervalMinutes: { $ref: '#/components/schemas/GridIntervalMinutes' }
+        maxSlots: { type: integer, minimum: 1, maximum: 48 }
+        basePricePerGridUnit: { $ref: '#/components/schemas/ThbAmount' }
+        peakTimeRanges: { type: array, items: { $ref: '#/components/schemas/PeakTimeRange' } }
+        schedule: { type: array, items: { $ref: '#/components/schemas/CourtScheduleDay' }, minItems: 7, maxItems: 7 }
+        isActive: { type: boolean }
+        createdAt: { $ref: '#/components/schemas/IsoDateTime' }
+    PublicCourt:
+      type: object
+      required: [id, branchId, sportId, name, gridIntervalMinutes, maxSlots, basePricePerGridUnit, peakTimeRanges, schedule]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        branchId: { $ref: '#/components/schemas/Id' }
+        sportId: { $ref: '#/components/schemas/Id' }
+        name: { type: string }
+        gridIntervalMinutes: { $ref: '#/components/schemas/GridIntervalMinutes' }
+        maxSlots: { type: integer }
+        basePricePerGridUnit: { $ref: '#/components/schemas/ThbAmount' }
+        peakTimeRanges: { type: array, items: { $ref: '#/components/schemas/PeakTimeRange' } }
+        schedule: { type: array, items: { $ref: '#/components/schemas/CourtScheduleDay' } }
+    CourtBlock:
+      type: object
+      required: [id, courtId, reason, startsAt, endsAt, createdAt]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        courtId: { $ref: '#/components/schemas/Id' }
+        reason: { type: [string, 'null'] }
+        startsAt: { $ref: '#/components/schemas/IsoDateTime' }
+        endsAt: { $ref: '#/components/schemas/IsoDateTime' }
+        createdAt: { $ref: '#/components/schemas/IsoDateTime' }
+
+    # -------- member / admin user
+    Member:
+      type: object
+      required: [id, phone, phoneVerified, name, emergencyContact, sex, lineBound, hasLineLogin, isBlocked, createdAt]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        phone: { oneOf: [{ $ref: '#/components/schemas/ThaiPhone' }, { type: 'null' }] }
+        phoneVerified: { type: boolean }
+        name: { type: [string, 'null'] }
+        emergencyContact: { type: [string, 'null'] }
+        sex: { oneOf: [{ $ref: '#/components/schemas/Sex' }, { type: 'null' }] }
+        lineBound: { type: boolean }
+        hasLineLogin: { type: boolean }
+        isBlocked: { type: boolean }
+        createdAt: { $ref: '#/components/schemas/IsoDateTime' }
+    Me:
+      type: object
+      required: [id, phone, phoneVerified, name, emergencyContact, sex, lineBound, hasLineLogin, createdAt]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        phone: { oneOf: [{ $ref: '#/components/schemas/ThaiPhone' }, { type: 'null' }] }
+        phoneVerified: { type: boolean }
+        name: { type: [string, 'null'] }
+        emergencyContact: { type: [string, 'null'] }
+        sex: { oneOf: [{ $ref: '#/components/schemas/Sex' }, { type: 'null' }] }
+        lineBound: { type: boolean }
+        hasLineLogin: { type: boolean }
+        createdAt: { $ref: '#/components/schemas/IsoDateTime' }
+    MemberAdminView:
+      allOf:
+        - $ref: '#/components/schemas/Member'
+        - type: object
+          required: [bookingCount, lastBookingAt]
+          properties:
+            bookingCount: { type: integer }
+            lastBookingAt: { oneOf: [{ $ref: '#/components/schemas/IsoDateTime' }, { type: 'null' }] }
+    AdminUser:
+      type: object
+      required: [id, email, name, role, branchId, isActive, createdAt]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        email: { type: string, format: email }
+        name: { type: string }
+        role: { $ref: '#/components/schemas/Role' }
+        branchId: { oneOf: [{ $ref: '#/components/schemas/Id' }, { type: 'null' }] }
+        isActive: { type: boolean }
+        createdAt: { $ref: '#/components/schemas/IsoDateTime' }
+
+    # -------- promotion / news
+    Promotion:
+      type: object
+      required: [id, code, description, discountType, discountValue, validFrom, validUntil, branchId, sportId, courtId, maxTotalUses, maxUsesPerMember, totalUses, isActive, createdAt]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        code: { type: string }
+        description: { type: [string, 'null'] }
+        discountType: { $ref: '#/components/schemas/DiscountType' }
+        discountValue: { type: integer, description: 'PERCENTAGE:1..100; FIXED: satang' }
+        validFrom: { $ref: '#/components/schemas/IsoDateTime' }
+        validUntil: { $ref: '#/components/schemas/IsoDateTime' }
+        branchId: { oneOf: [{ $ref: '#/components/schemas/Id' }, { type: 'null' }] }
+        sportId: { oneOf: [{ $ref: '#/components/schemas/Id' }, { type: 'null' }] }
+        courtId: { oneOf: [{ $ref: '#/components/schemas/Id' }, { type: 'null' }] }
+        maxTotalUses: { type: [integer, 'null'] }
+        maxUsesPerMember: { type: [integer, 'null'] }
+        totalUses: { type: integer }
+        isActive: { type: boolean }
+        createdAt: { $ref: '#/components/schemas/IsoDateTime' }
+    AppliedPromotion:
+      type: object
+      required: [promotionId, code, discountType, discountValue, discountAmount]
+      properties:
+        promotionId: { $ref: '#/components/schemas/Id' }
+        code: { type: string }
+        discountType: { $ref: '#/components/schemas/DiscountType' }
+        discountValue: { type: integer }
+        discountAmount: { $ref: '#/components/schemas/ThbAmount' }
+    PromotionUsageItem:
+      type: object
+      required: [bookingId, memberId, memberPhone, discountAmount, usedAt]
+      properties:
+        bookingId: { $ref: '#/components/schemas/Id' }
+        memberId: { $ref: '#/components/schemas/Id' }
+        memberPhone: { type: [string, 'null'] }
+        discountAmount: { $ref: '#/components/schemas/ThbAmount' }
+        usedAt: { $ref: '#/components/schemas/IsoDateTime' }
+    News:
+      type: object
+      required: [id, title, body, imageUrl, status, publishedAt, createdAt, updatedAt]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        title: { type: string }
+        body: { type: string }
+        imageUrl: { type: [string, 'null'], format: uri }
+        status: { $ref: '#/components/schemas/NewsStatus' }
+        publishedAt: { oneOf: [{ $ref: '#/components/schemas/IsoDateTime' }, { type: 'null' }] }
+        createdAt: { $ref: '#/components/schemas/IsoDateTime' }
+        updatedAt: { $ref: '#/components/schemas/IsoDateTime' }
+    PublicNews:
+      type: object
+      required: [id, title, body, imageUrl, publishedAt]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        title: { type: string }
+        body: { type: string }
+        imageUrl: { type: [string, 'null'], format: uri }
+        publishedAt: { $ref: '#/components/schemas/IsoDateTime' }
+
+    # -------- pricing / payment / booking
+    PricedGridUnit:
+      type: object
+      required: [index, startTime, isPeak, unitPrice]
+      properties:
+        index: { type: integer, minimum: 0 }
+        startTime: { $ref: '#/components/schemas/TimeOfDay' }
+        isPeak: { type: boolean }
+        unitPrice: { $ref: '#/components/schemas/ThbAmount' }
+    PriceBreakdown:
+      type: object
+      required: [currency, gridIntervalMinutes, slotCount, units, subtotal, promotion, total]
+      properties:
+        currency: { type: string, const: THB }
+        gridIntervalMinutes: { $ref: '#/components/schemas/GridIntervalMinutes' }
+        slotCount: { type: integer, minimum: 1 }
+        units: { type: array, items: { $ref: '#/components/schemas/PricedGridUnit' }, minItems: 1 }
+        subtotal: { $ref: '#/components/schemas/ThbAmount' }
+        promotion: { oneOf: [{ $ref: '#/components/schemas/AppliedPromotion' }, { type: 'null' }] }
+        total: { $ref: '#/components/schemas/ThbAmount' }
+    PromptPayQr:
+      type: object
+      required: [payload, qrImageDataUrl]
+      properties:
+        payload: { type: string }
+        qrImageDataUrl: { type: string }
+    Payment:
+      type: object
+      required: [id, bookingId, status, amountDue, qr, slipUrl, slipUploadedAt, reviewedByAdminId, reviewedAt, rejectionReason, createdAt, updatedAt]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        bookingId: { $ref: '#/components/schemas/Id' }
+        status: { $ref: '#/components/schemas/PaymentStatus' }
+        amountDue: { $ref: '#/components/schemas/ThbAmount' }
+        qr: { oneOf: [{ $ref: '#/components/schemas/PromptPayQr' }, { type: 'null' }] }
+        slipUrl: { type: [string, 'null'], format: uri }
+        slipUploadedAt: { oneOf: [{ $ref: '#/components/schemas/IsoDateTime' }, { type: 'null' }] }
+        reviewedByAdminId: { oneOf: [{ $ref: '#/components/schemas/Id' }, { type: 'null' }] }
+        reviewedAt: { oneOf: [{ $ref: '#/components/schemas/IsoDateTime' }, { type: 'null' }] }
+        rejectionReason: { type: [string, 'null'] }
+        createdAt: { $ref: '#/components/schemas/IsoDateTime' }
+        updatedAt: { $ref: '#/components/schemas/IsoDateTime' }
+    BookingContext:
+      type: object
+      required: [branchId, branchName, branchPaymentMethod, sportId, sportName, courtId, courtName]
+      properties:
+        branchId: { $ref: '#/components/schemas/Id' }
+        branchName: { type: string }
+        branchPaymentMethod: { $ref: '#/components/schemas/BranchPaymentMethod' }
+        sportId: { $ref: '#/components/schemas/Id' }
+        sportName: { type: string }
+        courtId: { $ref: '#/components/schemas/Id' }
+        courtName: { type: string }
+    Booking:
+      type: object
+      required: [id, memberId, context, status, startsAt, endsAt, gridIntervalMinutes, slotCount, price, verifiedVia, isWalkIn, holdExpiresAt, createdAt, updatedAt]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        memberId: { $ref: '#/components/schemas/Id' }
+        context: { $ref: '#/components/schemas/BookingContext' }
+        status: { $ref: '#/components/schemas/BookingStatus' }
+        startsAt: { $ref: '#/components/schemas/IsoDateTime' }
+        endsAt: { $ref: '#/components/schemas/IsoDateTime' }
+        gridIntervalMinutes: { type: integer }
+        slotCount: { type: integer, minimum: 1 }
+        price: { $ref: '#/components/schemas/PriceBreakdown' }
+        verifiedVia: { $ref: '#/components/schemas/VerifiedVia' }
+        isWalkIn: { type: boolean }
+        holdExpiresAt: { oneOf: [{ $ref: '#/components/schemas/IsoDateTime' }, { type: 'null' }] }
+        createdAt: { $ref: '#/components/schemas/IsoDateTime' }
+        updatedAt: { $ref: '#/components/schemas/IsoDateTime' }
+    BookingDetail:
+      allOf:
+        - $ref: '#/components/schemas/Booking'
+        - type: object
+          required: [payment, member, allowedActions]
+          properties:
+            payment: { $ref: '#/components/schemas/Payment' }
+            member:
+              type: object
+              required: [id, phone, name, phoneVerified]
+              properties:
+                id: { $ref: '#/components/schemas/Id' }
+                phone: { type: [string, 'null'] }
+                name: { type: [string, 'null'] }
+                phoneVerified: { type: boolean }
+            allowedActions:
+              type: array
+              items:
+                type: string
+                enum: [REQUEST_CANCELLATION, UPLOAD_SLIP, ADMIN_CONFIRM_PAYMENT, ADMIN_REJECT_PAYMENT, ADMIN_MODIFY, ADMIN_CANCEL, ADMIN_APPROVE_CANCELLATION, ADMIN_DECLINE_CANCELLATION, ADMIN_MARK_COMPLETED, ADMIN_MARK_NO_SHOW]
+    BookingListItem:
+      type: object
+      required: [id, status, paymentStatus, branchName, sportName, courtName, startsAt, endsAt, slotCount, amountDue, memberPhone, memberName]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        status: { $ref: '#/components/schemas/BookingStatus' }
+        paymentStatus: { $ref: '#/components/schemas/PaymentStatus' }
+        branchName: { type: string }
+        sportName: { type: string }
+        courtName: { type: string }
+        startsAt: { $ref: '#/components/schemas/IsoDateTime' }
+        endsAt: { $ref: '#/components/schemas/IsoDateTime' }
+        slotCount: { type: integer }
+        amountDue: { $ref: '#/components/schemas/ThbAmount' }
+        memberPhone: { type: [string, 'null'] }
+        memberName: { type: [string, 'null'] }
+
+    # -------- availability
+    AvailabilityStart:
+      type: object
+      required: [startTime, startsAt, maxSlotCount, pricePerSlotCount]
+      properties:
+        startTime: { $ref: '#/components/schemas/TimeOfDay' }
+        startsAt: { $ref: '#/components/schemas/IsoDateTime' }
+        maxSlotCount: { type: integer, minimum: 0 }
+        pricePerSlotCount: { type: array, items: { $ref: '#/components/schemas/ThbAmount' } }
+    AvailabilityResponse:
+      type: object
+      required: [courtId, date, gridIntervalMinutes, maxSlots, closed, starts]
+      properties:
+        courtId: { $ref: '#/components/schemas/Id' }
+        date: { $ref: '#/components/schemas/IsoDate' }
+        gridIntervalMinutes: { $ref: '#/components/schemas/GridIntervalMinutes' }
+        maxSlots: { type: integer, minimum: 1 }
+        closed: { type: boolean }
+        starts: { type: array, items: { $ref: '#/components/schemas/AvailabilityStart' } }
+
+    # -------- request DTOs
+    CreateHoldBody:
+      type: object
+      required: [start, slotCount]
+      properties:
+        start: { $ref: '#/components/schemas/IsoDateTime' }
+        slotCount: { type: integer, minimum: 1 }
+        promoCode: { type: string }
+    CreateHoldResponse:
+      type: object
+      required: [booking, branchPaymentMethod, nextStep]
+      properties:
+        booking: { $ref: '#/components/schemas/BookingDetail' }
+        branchPaymentMethod: { $ref: '#/components/schemas/BranchPaymentMethod' }
+        nextStep: { type: string, enum: [VERIFY_PHONE, UPLOAD_SLIP, CONFIRMED] }
+    ApplyPromoBody:
+      type: object
+      required: [code]
+      properties: { code: { type: string } }
+    SlipUploadUrlBody:
+      type: object
+      required: [contentType, contentLength]
+      properties:
+        contentType: { type: string, enum: [image/jpeg, image/png, image/webp] }
+        contentLength: { type: integer, minimum: 1 }
+    SlipUploadUrlResponse:
+      type: object
+      required: [uploadUrl, objectKey, requiredHeaders, expiresAt]
+      properties:
+        uploadUrl: { type: string, format: uri }
+        objectKey: { type: string }
+        requiredHeaders: { type: object, additionalProperties: { type: string } }
+        expiresAt: { $ref: '#/components/schemas/IsoDateTime' }
+    ConfirmSlipBody:
+      type: object
+      required: [objectKey]
+      properties: { objectKey: { type: string } }
+    CancellationRequestBody:
+      type: object
+      properties: { reason: { type: string } }
+    OtpRequestBody:
+      type: object
+      required: [phone, purpose]
+      properties:
+        phone: { $ref: '#/components/schemas/ThaiPhone' }
+        purpose: { $ref: '#/components/schemas/OtpPurpose' }
+    OtpRequestResponse:
+      type: object
+      required: [challengeId, expiresAt, resendAvailableAt]
+      properties:
+        challengeId: { $ref: '#/components/schemas/Id' }
+        expiresAt: { $ref: '#/components/schemas/IsoDateTime' }
+        resendAvailableAt: { $ref: '#/components/schemas/IsoDateTime' }
+        devCode: { type: [string, 'null'], description: dev/stub only; null in production }
+    OtpVerifyBody:
+      type: object
+      required: [challengeId, code]
+      properties:
+        challengeId: { $ref: '#/components/schemas/Id' }
+        code: { type: string }
+    MemberSessionResponse:
+      type: object
+      required: [member, sessionExpiresAt]
+      properties:
+        member: { $ref: '#/components/schemas/Me' }
+        sessionExpiresAt: { $ref: '#/components/schemas/IsoDateTime' }
+    LineLoginUrlResponse:
+      type: object
+      required: [authorizationUrl, state]
+      properties:
+        authorizationUrl: { type: string, format: uri }
+        state: { type: string }
+    LineCallbackBody:
+      type: object
+      required: [code, state]
+      properties:
+        code: { type: string }
+        state: { type: string }
+    LineOaLinkUrlResponse:
+      type: object
+      required: [linkUrl, expiresAt]
+      properties:
+        linkUrl: { type: string, format: uri }
+        expiresAt: { $ref: '#/components/schemas/IsoDateTime' }
+    UpdateProfileBody:
+      type: object
+      properties:
+        name: { type: [string, 'null'] }
+        emergencyContact: { type: [string, 'null'] }
+        sex: { oneOf: [{ $ref: '#/components/schemas/Sex' }, { type: 'null' }] }
+    AdminLoginBody:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string }
+    AdminSessionResponse:
+      type: object
+      required: [admin, sessionExpiresAt]
+      properties:
+        admin: { $ref: '#/components/schemas/AdminUser' }
+        sessionExpiresAt: { $ref: '#/components/schemas/IsoDateTime' }
+    AdminCreateBookingBody:
+      type: object
+      required: [courtId, start, slotCount]
+      properties:
+        courtId: { $ref: '#/components/schemas/Id' }
+        start: { $ref: '#/components/schemas/IsoDateTime' }
+        slotCount: { type: integer, minimum: 1 }
+        memberId: { $ref: '#/components/schemas/Id' }
+        newMemberPhone: { $ref: '#/components/schemas/ThaiPhone' }
+        newMemberName: { type: string }
+        promoCode: { type: string }
+        directConfirmPayment: { type: boolean, default: false }
+    AdminModifyBookingBody:
+      type: object
+      properties:
+        courtId: { $ref: '#/components/schemas/Id' }
+        start: { $ref: '#/components/schemas/IsoDateTime' }
+        slotCount: { type: integer, minimum: 1 }
+    AdminCancelBookingBody:
+      type: object
+      properties: { reason: { type: string } }
+    AdminSetBookingOutcomeBody:
+      type: object
+      required: [outcome]
+      properties: { outcome: { type: string, enum: [COMPLETED, NO_SHOW] } }
+    AdminConfirmPaymentBody:
+      type: object
+      properties: { note: { type: string } }
+    AdminRejectPaymentBody:
+      type: object
+      required: [reason]
+      properties: { reason: { type: string } }
+    SlipViewUrlResponse:
+      type: object
+      required: [slipUrl, expiresAt]
+      properties:
+        slipUrl: { type: string, format: uri }
+        expiresAt: { $ref: '#/components/schemas/IsoDateTime' }
+    AdminCancellationDecisionBody:
+      type: object
+      required: [decision]
+      properties:
+        decision: { type: string, enum: [APPROVE, DECLINE] }
+        reason: { type: string }
+    UpsertBranchBody:
+      type: object
+      required: [name, address, paymentMethod, promptPayId, businessHours]
+      properties:
+        name: { type: string }
+        address: { type: string }
+        paymentMethod: { $ref: '#/components/schemas/BranchPaymentMethod' }
+        promptPayId: { type: [string, 'null'] }
+        businessHours: { type: array, items: { $ref: '#/components/schemas/BusinessHoursDay' }, minItems: 7, maxItems: 7 }
+    UpsertSportBody:
+      type: object
+      required: [name]
+      properties: { name: { type: string } }
+    PeakTimeRangeInput:
+      type: object
+      required: [days, startTime, endTime, pricePerGridUnit]
+      properties:
+        label: { type: [string, 'null'] }
+        days: { type: array, items: { $ref: '#/components/schemas/DayOfWeek' }, minItems: 1 }
+        startTime: { $ref: '#/components/schemas/TimeOfDay' }
+        endTime: { $ref: '#/components/schemas/TimeOfDay' }
+        pricePerGridUnit: { $ref: '#/components/schemas/ThbAmount' }
+    UpsertCourtBody:
+      type: object
+      required: [branchId, sportId, name, gridIntervalMinutes, maxSlots, basePricePerGridUnit, peakTimeRanges, schedule]
+      properties:
+        branchId: { $ref: '#/components/schemas/Id' }
+        sportId: { $ref: '#/components/schemas/Id' }
+        name: { type: string }
+        gridIntervalMinutes: { $ref: '#/components/schemas/GridIntervalMinutes' }
+        maxSlots: { type: integer, minimum: 1, maximum: 48 }
+        basePricePerGridUnit: { $ref: '#/components/schemas/ThbAmount' }
+        peakTimeRanges: { type: array, items: { $ref: '#/components/schemas/PeakTimeRangeInput' } }
+        schedule: { type: array, items: { $ref: '#/components/schemas/CourtScheduleDay' }, minItems: 7, maxItems: 7 }
+    CreateCourtBlockBody:
+      type: object
+      required: [startsAt, endsAt]
+      properties:
+        reason: { type: string }
+        startsAt: { $ref: '#/components/schemas/IsoDateTime' }
+        endsAt: { $ref: '#/components/schemas/IsoDateTime' }
+    LifecycleResult:
+      type: object
+      required: [id, isActive, deletedAt]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        isActive: { type: boolean }
+        deletedAt: { oneOf: [{ $ref: '#/components/schemas/IsoDateTime' }, { type: 'null' }] }
+    UpsertPromotionBody:
+      type: object
+      required: [code, discountType, discountValue, validFrom, validUntil]
+      properties:
+        code: { type: string }
+        description: { type: [string, 'null'] }
+        discountType: { $ref: '#/components/schemas/DiscountType' }
+        discountValue: { type: integer, minimum: 1 }
+        validFrom: { $ref: '#/components/schemas/IsoDateTime' }
+        validUntil: { $ref: '#/components/schemas/IsoDateTime' }
+        branchId: { oneOf: [{ $ref: '#/components/schemas/Id' }, { type: 'null' }] }
+        sportId: { oneOf: [{ $ref: '#/components/schemas/Id' }, { type: 'null' }] }
+        courtId: { oneOf: [{ $ref: '#/components/schemas/Id' }, { type: 'null' }] }
+        maxTotalUses: { type: [integer, 'null'] }
+        maxUsesPerMember: { type: [integer, 'null'] }
+    UpsertNewsBody:
+      type: object
+      required: [title, body, status]
+      properties:
+        title: { type: string }
+        body: { type: string }
+        imageUrl: { type: [string, 'null'], format: uri }
+        status: { $ref: '#/components/schemas/NewsStatus' }
+    AdminBlockMemberBody:
+      type: object
+      required: [blocked]
+      properties:
+        blocked: { type: boolean }
+        reason: { type: string }
+    ImageUploadUrlBody:
+      type: object
+      required: [purpose, contentType, contentLength]
+      properties:
+        purpose: { type: string, enum: [LOGO, NEWS] }
+        contentType: { type: string, enum: [image/jpeg, image/png, image/webp, image/svg+xml] }
+        contentLength: { type: integer, minimum: 1 }
+    ImageUploadUrlResponse:
+      type: object
+      required: [uploadUrl, publicUrl, requiredHeaders, expiresAt]
+      properties:
+        uploadUrl: { type: string, format: uri }
+        publicUrl: { type: string, format: uri }
+        requiredHeaders: { type: object, additionalProperties: { type: string } }
+        expiresAt: { $ref: '#/components/schemas/IsoDateTime' }
+    CreateAdminUserBody:
+      type: object
+      required: [email, name, password, role]
+      properties:
+        email: { type: string, format: email }
+        name: { type: string }
+        password: { type: string, minLength: 8 }
+        role: { type: string, enum: [ADMIN, BRANCH_ADMIN] }
+        branchId: { oneOf: [{ $ref: '#/components/schemas/Id' }, { type: 'null' }] }
+    UpdateAdminUserBody:
+      type: object
+      properties:
+        name: { type: string }
+        role: { type: string, enum: [ADMIN, BRANCH_ADMIN] }
+        branchId: { oneOf: [{ $ref: '#/components/schemas/Id' }, { type: 'null' }] }
+        isActive: { type: boolean }
+        password: { type: string, minLength: 8 }
+    RolesMatrix:
+      type: object
+      required: [roles, capabilities]
+      properties:
+        roles: { type: array, items: { $ref: '#/components/schemas/Role' } }
+        capabilities:
+          type: array
+          items:
+            type: object
+            required: [key, label, allowed]
+            properties:
+              key: { type: string }
+              label: { type: string }
+              allowed: { type: object, additionalProperties: { type: boolean } }

@@ -1,0 +1,16 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: court2go-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: court2go
+      POSTGRES_PASSWORD: court2go
+      POSTGRES_DB: court2go
+    ports:
+      - "5433:5432"
+    volumes:
+      - court2go_pgdata:/var/lib/postgresql/data
+
+volumes:
+  court2go_pgdata:

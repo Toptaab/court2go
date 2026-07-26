@@ -1,0 +1,31 @@
+{
+  "name": "@repo/api",
+  "version": "0.1.0",
+  "private": true,
+  "description": "court2go NestJS API — see docs/ARCHITECTURE.md. Prisma schema/migrations/seed owned by prisma-data (apps/api/prisma).",
+  "type": "commonjs",
+  "scripts": {
+    "postinstall": "prisma generate",
+    "prisma:validate": "prisma validate",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate:dev": "prisma migrate dev",
+    "prisma:migrate:deploy": "prisma migrate deploy",
+    "prisma:studio": "prisma studio",
+    "db:seed": "prisma db seed"
+  },
+  "dependencies": {
+    "@nestjs/common": "^11.1.6",
+    "@prisma/adapter-pg": "7.9.0",
+    "@prisma/client": "7.9.0",
+    "pg": "8.22.0",
+    "reflect-metadata": "^0.2.2"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "@types/pg": "8.20.0",
+    "dotenv": "^17.4.2",
+    "prisma": "7.9.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.5.4"
+  }
+}
