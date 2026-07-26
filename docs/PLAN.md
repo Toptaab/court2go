@@ -22,8 +22,12 @@ Shipped as `@repo/domain`: `grid.ts` (`isGridAligned`, `gridStartMinutes`, `maxS
 ## M4 — Availability ⬜
 `courts/{id}/availability` — per-court grid, active booking_slot reads, court schedule/blocks, peak ranges → free/taken grid.
 
-## M5 — Member auth (OTP stub + LINE) ⬜
+## M5 — Member auth (OTP stub + LINE) ✅
 `auth/otp/request|verify` (OtpSender stub), LINE login-url/callback, session cookie, `me` profile, one-time phone bind. Phone-verified-once invariant.
+
+Shipped in `apps/api`: a hexagonal `IntegrationsModule` (`@Global`) binding `OTP_SENDER`/`LINE_CLIENT` ports to env-selected adapters — `StubSmsAdapter` (logs the code) and `StubLineAdapter` (deterministic `lineUserId` from the auth code) — so real SMS/LINE providers drop in as one factory `case` with no consumer change. `AuthMemberService` orchestrates: HMAC-SHA256-hashed OTP (never plaintext, constant-time compare, crypto-random 6-digit), per-challenge attempt cap + Tenant-configurable resend cooldown & rolling-hour send cap, HMAC-signed tenant-bound LINE `state` (forgery/cross-tenant rejected), and a DB-backed `ClientSession` → `httpOnly` `c2g_member_session` cookie. LOGIN auto-provisions/verifies a Member; BIND enforces challenge-owner match + PHONE-VERIFIED-ONCE (`DUPLICATE_MEMBER` conflict). `MeController` GET/PATCH (phone immutable — changes go via OTP BIND). Tenant isolation rides `withTenant()`/RLS on every read/write. 57 api unit tests pass (+2 from review); tsc clean.
+
+Reviewer findings addressed: (1) added `@HttpCode(200)` to the four `@Post` auth handlers (NestJS defaulted to 201, drifting from openapi's 200); (2) OTP `devCode` disclosure and the cookie `Secure` flag now gate on an explicit dev/test allow-list (`isDevLikeEnv`) — **fail-closed** so an unset `NODE_ENV` in prod never leaks codes or drops `Secure` (dev ergonomics preserved via `NODE_ENV=development` in `start:dev`); (3) blocked Members (`isBlocked`) are now rejected at every session-mint path (OTP + LINE) with `MEMBER_BLOCKED`/403, defense-in-depth for the admin-block invariant. Deferred (🟢, both stub-only): LINE `state` carries no issued-at/expiry (no replay window — revisit with the real LINE adapter); cookie `sameSite:'lax'` assumes web+api share a registrable domain — if prod splits them cross-site, switch to `SameSite=None; Secure` (M11 deploy/topology decision).
 
 ## M6 — Booking + hold lifecycle ⬜
 `courts/{id}/holds` (create hold via safety-critical path), promotion apply, cancellation-request, `me/bookings`, status machine wiring. Hold-expiry cron job.
