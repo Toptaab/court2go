@@ -8,6 +8,7 @@ import { HealthController } from './modules/health/health.controller';
 import { PublicModule } from './modules/public/public.module';
 import { IntegrationsModule } from './integrations/integrations.module';
 import { AuthMemberModule } from './modules/auth-member/auth-member.module';
+import { AuthAdminModule } from './modules/auth-admin/auth-admin.module';
 import { MembersModule } from './modules/members/members.module';
 import { AvailabilityModule } from './modules/availability/availability.module';
 import { BookingsModule } from './modules/bookings/bookings.module';
@@ -28,6 +29,7 @@ import { PaymentsModule } from './modules/payments/payments.module';
     IntegrationsModule,
     PublicModule,
     AuthMemberModule,
+    AuthAdminModule,
     MembersModule,
     AvailabilityModule,
     BookingsModule,
