@@ -355,7 +355,15 @@ model CourtScheduleDay {
   closed Boolean
 
   /// HH:MM wall-clock (nullable iff closed=true) — validated app-side against
-  /// the shared `timeOfDaySchema` regex; stored as text to avoid TZ ambiguity.
+  /// the shared `latticeAlignedTimeSchema` (packages/types); stored as text to
+  /// avoid TZ ambiguity. Also constrained DB-side to the :00/:30 lock lattice
+  /// by the `court_schedule_day_lattice_align_check` CHECK — a raw-SQL,
+  /// non-Prisma-DSL-expressible follow-up migration
+  /// (20260726135123_court_schedule_day_lattice_align_check/migration.sql;
+  /// see also docs/ERD.md §3.1). Closes the silent-double-book gap flagged in
+  /// `packages/domain/src/grid.ts`'s `validateBookingSelection` docstring: an
+  /// off-lattice `openTime` (e.g. "08:15") would phase-shift the whole
+  /// availability grid off the fixed 30-min `BookingSlot.slotStart` lattice.
   openTime  String? @map("open_time") @db.VarChar(5)
   closeTime String? @map("close_time") @db.VarChar(5)
 

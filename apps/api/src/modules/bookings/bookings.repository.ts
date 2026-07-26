@@ -3,13 +3,15 @@ import {
   Booking,
   BookingStatus,
   BranchPaymentMethod,
+  Payment,
+  PaymentStatus,
   Prisma,
   VerifiedVia,
 } from '../../generated/prisma/client';
 import { PrismaService, TenantPrisma } from '../../prisma/prisma.service';
 import { getTenantId } from '../../prisma/tenant-context';
 import { isUniqueConstraintViolation } from '../../prisma/prisma-errors';
-import { SlotUnavailableError } from './errors';
+import { SlotUnavailableError, PromotionCapReachedError } from './errors';
 
 /**
  * Everything a caller (BookingService, owned by nestjs-backend) must supply
@@ -224,6 +226,106 @@ export class BookingsRepository {
     });
   }
 
+  /**
+   * The sole write path (with `advanceAfterVerification`'s self-heal call site
+   * in `BookingService`) that composes a Booking status transition OUT of
+   * `PENDING_VERIFICATION` together with the Payment row it always creates
+   * alongside that transition, and (only for the CONFIRMED/Pay-Onsite branch)
+   * the Promotion redemption — all inside ONE `withTenant` transaction so
+   * booking↔payment↔redemption never diverge (M6 build note: there is no DB
+   * convergence trigger for the Confirmed rule — this is the sole code path
+   * allowed to set `booking.status = CONFIRMED`, mirroring ARCHITECTURE §6.2).
+   */
+  async advanceOutOfVerification(args: {
+    bookingId: string;
+    newStatus: Extract<BookingStatus, 'PENDING_PAYMENT' | 'CONFIRMED'>;
+    payment: { status: PaymentStatus; amountDue: number };
+    redeem?: { promotionId: string; memberId: string; discountAmount: number };
+  }): Promise<{ booking: Booking; payment: Payment }> {
+    const tenantId = getTenantId();
+    return this.prisma.withTenant(async (tx) => {
+      // Status-guarded advance: only a still-`PENDING_VERIFICATION` booking may
+      // transition here. Two concurrent self-heal reads (`advanceAfterVerification`)
+      // can both observe the pre-transition state; the guard makes the winner
+      // advance and the loser a no-op — otherwise the loser would hit the
+      // `Payment.bookingId` / `PromotionRedemption.bookingId` unique constraint
+      // and surface a raw 500 on the money path.
+      const advanced = await tx.booking.updateMany({
+        where: { id: args.bookingId, status: 'PENDING_VERIFICATION' },
+        data: { status: args.newStatus },
+      });
+      if (advanced.count === 0) {
+        // Already advanced by a concurrent call — return the converged state.
+        const booking = await tx.booking.findUniqueOrThrow({ where: { id: args.bookingId } });
+        const payment = await tx.payment.findUniqueOrThrow({ where: { bookingId: args.bookingId } });
+        return { booking, payment };
+      }
+
+      if (args.redeem) {
+        // Atomic total-cap guard: a single-statement conditional UPDATE closes
+        // the read-at-hold / increment-at-confirm TOCTOU — concurrent confirms
+        // racing the last use can never push `total_uses` past `max_total_uses`
+        // (the row lock serialises the `total_uses < max_total_uses` check).
+        // NOTE (carryover for prisma-data): the per-member cap
+        // (`max_uses_per_member`) still has NO hard DB backstop — a
+        // `(promotion_id, member_id)` partial unique on `promotion_redemption`
+        // is the real fix; resolve-time `countUsesByMember` remains best-effort.
+        const bumped = await tx.$executeRaw`
+          UPDATE "promotion"
+             SET "total_uses" = "total_uses" + 1
+           WHERE "id" = ${args.redeem.promotionId}::uuid
+             AND ("max_total_uses" IS NULL OR "total_uses" < "max_total_uses")`;
+        if (bumped === 0) {
+          throw new PromotionCapReachedError(args.redeem.promotionId);
+        }
+        await tx.promotionRedemption.create({
+          data: {
+            tenantId,
+            promotionId: args.redeem.promotionId,
+            bookingId: args.bookingId,
+            memberId: args.redeem.memberId,
+            discountAmount: args.redeem.discountAmount,
+          },
+        });
+      }
+
+      const booking = await tx.booking.findUniqueOrThrow({ where: { id: args.bookingId } });
+      const payment = await tx.payment.create({
+        data: {
+          tenantId,
+          bookingId: args.bookingId,
+          status: args.payment.status,
+          amountDue: args.payment.amountDue,
+        },
+      });
+      return { booking, payment };
+    });
+  }
+
+  /**
+   * Re-price a booking (promo apply/remove, PRD C4.2) — updates the
+   * snapshotted `priceBreakdown`/`subtotalAmount`/`totalAmount`/promo fields
+   * on the Booking and, if a Payment row already exists (QR branch,
+   * PENDING_PAYMENT), keeps `Payment.amountDue` in sync — in ONE transaction.
+   */
+  async updatePricing(
+    bookingId: string,
+    data: {
+      priceBreakdown: Prisma.InputJsonValue;
+      subtotalAmount: number;
+      totalAmount: number;
+      appliedPromotionId: string | null;
+      promotionDiscountAmount: number | null;
+    },
+  ): Promise<{ booking: Booking; payment: Payment | null }> {
+    return this.prisma.withTenant(async (tx) => {
+      const booking = await tx.booking.update({ where: { id: bookingId }, data });
+      await tx.payment.updateMany({ where: { bookingId }, data: { amountDue: data.totalAmount } });
+      const payment = await tx.payment.findUnique({ where: { bookingId } });
+      return { booking, payment };
+    });
+  }
+
   async findById(id: string): Promise<Booking | null> {
     return this.prisma.withTenant((tx) => tx.booking.findUnique({ where: { id } }));
   }
@@ -234,14 +336,59 @@ export class BookingsRepository {
     );
   }
 
-  async listForMember(memberId: string, opts: { skip: number; take: number; status?: BookingStatus }) {
+  /** Member booking history (PRD C5.1) — `startsAtGte`/`startsAtLt` implement
+   * `MyBookingsQuery.scope` (upcoming/past/all), resolved by the caller from `now`. */
+  async listForMember(
+    memberId: string,
+    opts: {
+      skip: number;
+      take: number;
+      status?: BookingStatus;
+      startsAtGte?: Date;
+      startsAtLt?: Date;
+    },
+  ) {
     return this.prisma.withTenant((tx) =>
       tx.booking.findMany({
-        where: { memberId, ...(opts.status ? { status: opts.status } : {}) },
-        include: { payment: true },
+        where: {
+          memberId,
+          ...(opts.status ? { status: opts.status } : {}),
+          ...(opts.startsAtGte || opts.startsAtLt
+            ? {
+                startsAt: {
+                  ...(opts.startsAtGte ? { gte: opts.startsAtGte } : {}),
+                  ...(opts.startsAtLt ? { lt: opts.startsAtLt } : {}),
+                },
+              }
+            : {}),
+        },
+        include: { payment: true, member: { select: { phone: true, name: true } } },
         orderBy: { startsAt: 'desc' },
         skip: opts.skip,
         take: opts.take,
+      }),
+    );
+  }
+
+  /** Paired count for `listForMember`'s pagination envelope. */
+  async countForMember(
+    memberId: string,
+    opts: { status?: BookingStatus; startsAtGte?: Date; startsAtLt?: Date },
+  ): Promise<number> {
+    return this.prisma.withTenant((tx) =>
+      tx.booking.count({
+        where: {
+          memberId,
+          ...(opts.status ? { status: opts.status } : {}),
+          ...(opts.startsAtGte || opts.startsAtLt
+            ? {
+                startsAt: {
+                  ...(opts.startsAtGte ? { gte: opts.startsAtGte } : {}),
+                  ...(opts.startsAtLt ? { lt: opts.startsAtLt } : {}),
+                },
+              }
+            : {}),
+        },
       }),
     );
   }

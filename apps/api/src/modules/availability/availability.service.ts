@@ -12,33 +12,7 @@ import { ApiError } from '../../common/api-error';
 import { CourtsRepository } from '../courts/courts.repository';
 import { BookingsRepository } from '../bookings/bookings.repository';
 import { ConfigRepository } from '../config/config.repository';
-
-/**
- * Thailand-only MVP (PRD NFR9) — no timezone is stored anywhere in the schema.
- * The tenant local timezone is fixed to ICT = UTC+7, no DST. If the platform
- * ever goes multi-region this becomes a per-tenant/branch setting (flag-worthy,
- * not implemented now).
- */
-const ICT_OFFSET_MINUTES = 420;
-
-/** JS `Date.getUTCDay()` (0=SUN..6=SAT) → the platform's `DayOfWeek` enum. */
-const WEEKDAY_BY_JS_DAY: DayOfWeek[] = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
-
-/**
- * Combine an ICT calendar date (`YYYY-MM-DD`) and wall-clock time (`HH:MM`,
- * `24:00` permitted for end-of-day close) into the equivalent UTC instant.
- */
-function ictLocalToUtc(date: string, time: TimeOfDay): Date {
-  const [y, m, d] = date.split('-').map(Number);
-  const [hh, mm] = time.split(':').map(Number);
-  return new Date(Date.UTC(y, m - 1, d, hh, mm) - ICT_OFFSET_MINUTES * 60_000);
-}
-
-/** The `DayOfWeek` (ICT calendar date) the queried date falls on — NOT the host-tz weekday. */
-function resolveDayOfWeek(date: string): DayOfWeek {
-  const [y, m, d] = date.split('-').map(Number);
-  return WEEKDAY_BY_JS_DAY[new Date(Date.UTC(y, m - 1, d)).getUTCDay()];
-}
+import { ictLocalToUtc, resolveDayOfWeek } from './ict-time';
 
 @Injectable()
 export class AvailabilityService {

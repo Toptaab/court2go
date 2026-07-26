@@ -133,8 +133,11 @@ export type BookingSelectionResult =
  * `timeOfDaySchema`) would place every `expandToLattice` instant off that lattice,
  * so an on-lattice and an off-lattice booking could overlap in real time yet share
  * no `(court_id, slot_start)` pair — a silent double-book. Rejecting off-lattice
- * starts here closes that gap; the root cause (an unconstrained `openTime`) should
- * additionally be fixed at the schema level before M6 consumes this.
+ * starts here closes that gap; the root cause (an unconstrained `openTime`) is
+ * additionally constrained at the schema level by the
+ * `court_schedule_day_lattice_align_check` DB CHECK (migration
+ * `20260726135123_court_schedule_day_lattice_align_check`) and the
+ * `latticeAlignedTimeSchema` mirror in `@repo/types`.
  */
 export function validateBookingSelection(input: {
   openMinutes: number;
