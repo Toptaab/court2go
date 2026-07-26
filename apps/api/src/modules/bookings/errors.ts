@@ -15,3 +15,19 @@ export class SlotUnavailableError extends Error {
     this.name = 'SlotUnavailableError';
   }
 }
+
+/**
+ * Thrown from `BookingsRepository.advanceOutOfVerification` when a promotion's
+ * `maxTotalUses` cap is exhausted by the atomic, single-statement conditional
+ * increment (`UPDATE ... WHERE total_uses < max_total_uses`) at redemption
+ * time — closing the read-at-hold / increment-at-confirm TOCTOU window that a
+ * plain read-then-increment would leave open. The owning service maps this to
+ * `409 PROMO_NOT_APPLICABLE` (and releases the just-held slots on the
+ * synchronous confirm path). Repositories never produce HTTP status codes.
+ */
+export class PromotionCapReachedError extends Error {
+  constructor(public readonly promotionId: string) {
+    super(`promotion ${promotionId} has reached its maximum total uses`);
+    this.name = 'PromotionCapReachedError';
+  }
+}

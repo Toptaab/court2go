@@ -62,6 +62,28 @@ export const timeOfDaySchema = z
   .regex(/^(?:[01]\d|2[0-3]):[0-5]\d$|^24:00$/, 'must be HH:MM (00:00–24:00)');
 export type TimeOfDay = z.infer<typeof timeOfDaySchema>;
 
+/**
+ * A `TimeOfDay` additionally constrained to the platform-wide 30-minute lock
+ * lattice: the minute component MUST be `:00` or `:30`. `24:00` passes (ends in
+ * `:00`, end-of-day close).
+ *
+ * WHY (ARCHITECTURE §5.1/§5.4 — "silent double-book" risk): the internal lock
+ * lattice `booking_slot.slot_start` is fixed to the :00/:30 30-min grid. A court's
+ * per-day `openTime` ANCHORS its start-time grid; if that anchor is itself off the
+ * :00/:30 lattice, every computed grid start lands off-lattice, so holds are
+ * rejected OFF_LATTICE (M6) and an on-lattice booking could overlap an off-lattice
+ * one in real time yet share no `(court_id, slot_start)` pair. Constraining the
+ * schedule's open/close to this lattice closes that at the contract layer.
+ *
+ * Reuse this ONLY for the court schedule open/close. `timeOfDaySchema` itself stays
+ * unconstrained — peak-range boundaries use it and must NOT be lattice-aligned.
+ */
+export const latticeAlignedTimeSchema = timeOfDaySchema.refine(
+  (t) => t.endsWith(':00') || t.endsWith(':30'),
+  { message: 'must fall on the 30-min lattice (minute component :00 or :30)' },
+);
+export type LatticeAlignedTime = z.infer<typeof latticeAlignedTimeSchema>;
+
 /** A URL (used for logos, news images, presigned upload/download, QR data-URLs). */
 export const urlSchema = z.string().url();
 

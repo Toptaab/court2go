@@ -2,6 +2,7 @@ import { z } from 'zod';
 import {
   idSchema,
   timeOfDaySchema,
+  latticeAlignedTimeSchema,
   isoDateTimeSchema,
   thbAmountSchema,
 } from '../common/index';
@@ -11,13 +12,20 @@ import { dayOfWeekSchema, gridIntervalMinutesSchema } from '../enums/index';
  * One day-of-week entry in a Court's schedule (PRD A5.1 AC7). A closed day has
  * no open/close times and yields no availability. `openTime` anchors the court's
  * start-time grid for that day (ARCHITECTURE §5.1).
+ *
+ * `openTime`/`closeTime` are constrained to the fixed 30-min lock lattice
+ * (`latticeAlignedTimeSchema`, minute component :00 or :30). Because `openTime`
+ * anchors the start-time grid and the internal lock lattice `booking_slot.slot_start`
+ * is fixed to :00/:30, an off-lattice anchor would push every grid start off the
+ * lattice and enable a silent double-book (ARCHITECTURE §5.1/§5.4). `closeTime`
+ * still accepts `24:00` (end-of-day).
  */
 export const courtScheduleDaySchema = z
   .object({
     day: dayOfWeekSchema,
     closed: z.boolean(),
-    openTime: timeOfDaySchema.nullable(),
-    closeTime: timeOfDaySchema.nullable(),
+    openTime: latticeAlignedTimeSchema.nullable(),
+    closeTime: latticeAlignedTimeSchema.nullable(),
   })
   .refine((d) => d.closed || (d.openTime !== null && d.closeTime !== null), {
     message: 'open/close times required when the day is not closed',

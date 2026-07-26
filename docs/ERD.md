@@ -302,6 +302,35 @@ Per `ARCHITECTURE.md` §9 item 1, five things live in
 
 All five were applied to a real local Postgres 16 (`docker-compose.yml` at repo root) and functionally verified during this build — not just written and assumed correct.
 
+### 3.1 Follow-up migration — 30-minute lock-lattice alignment on `CourtScheduleDay`
+
+`20260726135123_court_schedule_day_lattice_align_check` (a *separate*, later migration — the `init`
+migration above is never edited once applied, per §6 below) adds one more hand-written CHECK,
+resolving an M3-carried flag ahead of M4's availability grid:
+
+```sql
+ALTER TABLE "court_schedule_day"
+  ADD CONSTRAINT "court_schedule_day_lattice_align_check"
+    CHECK (
+      ("open_time" IS NULL OR "open_time" ~ ':(00|30)$')
+      AND ("close_time" IS NULL OR "close_time" ~ ':(00|30)$')
+    );
+```
+
+`BookingSlot.slotStart` (§2 above) sits on the fixed, platform-wide 30-minute lock lattice regardless
+of a Court's own `gridIntervalMinutes`. If a Court's `openTime`/`closeTime` were allowed off that
+lattice (e.g. `"08:15"`), the M4 availability grid — which starts iterating from `openTime` — would
+generate every slot for that court phase-shifted off the 30-minute lattice too, silently defeating the
+`uniq_active_court_slot` partial unique index's double-booking guarantee (two grids phased differently
+could each believe a real-world-overlapping half-open interval is free). This is additive to, not a
+replacement for, `court_schedule_day_times_check` (closed ⇔ both NULL; `close_time > open_time`) from
+the `init` migration, which is left untouched. `"24:00"` (the only valid non-`HH:MM` value, used for a
+Court open until midnight) ends in `:00` and is therefore still permitted as a `close_time`.
+
+Verified with a live smoke test against local Postgres: inserting `open_time = '08:15'` raises `23514`
+(`check_violation`); `open_time = '08:30'`, `close_time = '24:00'` both commit cleanly. Seed data
+(`08:00`/`22:00`, apps/api/prisma/seed.ts) already sat on the lattice and needed no change.
+
 ---
 
 ## 4. Denormalization decisions on `Booking`
