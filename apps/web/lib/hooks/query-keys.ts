@@ -29,4 +29,8 @@ export const queryKeys = {
   courtDetail: (slug: string, courtId: string) => ['public', slug, 'courts', courtId] as const,
   availability: (slug: string, courtId: string, date: string) =>
     ['public', slug, 'courts', courtId, 'availability', date] as const,
+
+  // --- Member bookings (M10.5) ---
+  bookingDetail: (bookingId: string) => ['member', 'bookings', bookingId] as const,
+  myBookings: (scope?: string, page?: number) => ['member', 'bookings', 'list', { scope, page }] as const,
 };
