@@ -1,39 +1,36 @@
 import type { ReactNode } from 'react';
+import { AdminNav } from './admin-nav';
 
 /**
  * Admin console shell — desktop chrome, per docs/DESIGN.md `admin-console.html`.
  *
- * NEUTRAL BY DESIGN (DESIGN.md line 32 / "Notes for frontend build": "Admin
- * chrome stays neutral (never tenant-tinted); accent only on primary
- * actions + branding preview"). This layout deliberately does NOT wrap
- * children in `<ThemeContainer accent={...}>` — the chrome (sidebar nav,
- * page background, borders) uses only `ink`/`line`/`surface` tokens, which
- * are tenant-independent. Individual admin screens may still reach for
- * `bg-accent`/`text-accent` on a specific primary button or the branding
- * preview swatch (D15) — that's an intentionally narrow, per-element use,
- * not a page-level tint.
+ * NEUTRAL BY DESIGN: Admin chrome stays neutral (never tenant-tinted); accent
+ * only on the brand mark, the active nav icon, the userchip avatar, and
+ * primary actions. Uses `ink`/`line`/`surface`/`paper` tokens.
  *
- * Full-bleed desktop layout (not the mobile-column shell `(public)`/`(member)`
- * use) — a fixed-width sidebar + fluid content area. The sidebar's nav
- * items are added in M10.7 (role-aware nav via `RolesMatrix`); this slice
- * only lays out the two regions.
+ * Full-bleed desktop layout: fixed sidebar + fluid content area. The sidebar
+ * is a full-height flex column (brandrow, then `<AdminNav />` filling the
+ * rest via `flex-1`) so the nav's userchip can pin to the bottom with
+ * `mt-auto`. The content column sits on `bg-paper`; the sidebar and topbar
+ * stay on `bg-surface` (white) divided by the neutral `border-line-100`
+ * line. Per-screen titles now live in each page's `<PageHeader>` — this
+ * shell's topbar is just a thin neutral bar, no duplicate title.
  */
 export default function AdminLayout({ children }: { children: ReactNode }) {
   return (
-    <div className="flex min-h-screen bg-bg text-fg">
-      <aside className="hidden w-60 shrink-0 border-r border-line-100 bg-surface md:block">
-        <div className="px-4 py-5">
-          <span className="font-disp text-sm font-semibold tracking-wide text-fg">
-            court2go admin
+    <div className="flex min-h-screen bg-paper text-fg">
+      <aside className="hidden w-60 shrink-0 flex-col border-r border-line-100 bg-surface md:flex">
+        <div className="flex items-center gap-2.5 px-4 py-5">
+          <span className="grid h-7 w-7 shrink-0 place-items-center rounded-md bg-accent text-sm font-extrabold text-accent-ink">
+            C
           </span>
+          <span className="font-disp text-sm font-bold tracking-tight text-fg">court2go</span>
         </div>
-        {/* Role-aware nav (RolesMatrix-driven) lands in M10.7. */}
+        <AdminNav />
       </aside>
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex h-14 items-center border-b border-line-100 bg-surface px-6">
-          <span className="text-sm text-fg-muted">Admin console</span>
-        </header>
-        <main className="flex-1 p-6">{children}</main>
+        <header className="flex h-14 shrink-0 items-center border-b border-line-100 bg-surface px-6" />
+        <main className="flex-1 bg-paper p-6">{children}</main>
       </div>
     </div>
   );

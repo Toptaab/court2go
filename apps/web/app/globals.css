@@ -52,6 +52,10 @@
   --status-info: #2f6feb;
   --status-pay-onsite: #5b5bd6;
   --status-line: #06c755;
+  /* Warn chip ink — the plain --status-warn hex is too light to read as
+     text on the soft chip tint, so it gets its own darkened ink token
+     (mockup): #8a5e08 light, overridden to #e9b53f in the dark blocks. */
+  --status-warn-ink: #8a5e08;
 
   /* RGB channels of the status colors above, for Tailwind's
      rgb(var(...) / <alpha-value>) opacity-modifier pattern. Same values in
@@ -72,33 +76,52 @@
   --line-100: #e4e6e3;
   --line-300: #cdd0cc;
 
-  /* --- app-shell surface layers (derived from the scale above) --- */
-  --bg: #ffffff;
+  /* --- app-shell surface layers ---
+     Mockup (admin-console.html :root) separates the PAGE from CARDS:
+     `--paper` is the page/app-shell background, `--surface` is the white card
+     that floats on it (do not collapse them — the paper/card contrast is the
+     signature of the admin chrome). `--surface-2`/`--surface-3` are the
+     progressively-recessed neutral layers (inputs, closed cells, chips).
+     `--bg` aliases `--paper` so `body` + every shell sits on paper by default. */
+  --paper: #f1f2ef;
   --surface: #ffffff;
-  --surface-2: color-mix(in oklab, var(--ink-900) 3%, white);
+  --surface-2: #f6f7f5;
+  --surface-3: #edeeeb;
+  --bg: var(--paper);
   --fg: var(--ink-900);
   --fg-muted: var(--ink-500);
 
-  /* --- type --- */
+  /* --- radius scale (mockup :root) --- */
+  --r-sm: 7px;
+  --r-md: 10px;
+  --r-lg: 14px;
+  --pill: 999px;
+
+  /* --- type ---
+     system-ui FIRST so Latin glyphs render from the platform UI font; Noto
+     Sans Thai is the Thai-script fallback (never the primary — putting it
+     first made Latin text render from the Thai face, per mockup). */
   --sans:
-    'Noto Sans Thai', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue',
-    Arial, sans-serif;
+    system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans Thai',
+    ui-sans-serif, sans-serif;
   --disp: var(--sans);
   --mono: ui-monospace, 'SF Mono', 'Cascadia Code', 'Roboto Mono', Menlo, Consolas, monospace;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --ink-900: #f2f3f1;
-    --ink-700: #cdd0cc;
-    --ink-500: #9aa0a6;
-    --ink-300: #5b6067;
-    --line-100: #2a2d30;
-    --line-300: #3a3f45;
+    --ink-900: #f3f4f1;
+    --ink-700: #c7cbcf;
+    --ink-500: #8a9096;
+    --ink-300: #4a5057;
+    --line-100: #282d32;
+    --line-300: #3a4046;
 
-    --bg: #121416;
-    --surface: #1a1d20;
-    --surface-2: color-mix(in oklab, white 4%, #1a1d20);
+    --paper: #0b0d0f;
+    --surface: #15181c;
+    --surface-2: #1b1f23;
+    --surface-3: #22262b;
+    --bg: var(--paper);
     --fg: var(--ink-900);
     --fg-muted: var(--ink-500);
 
@@ -113,20 +136,23 @@
     --status-info-rgb: 47 111 235;
     --status-pay-onsite-rgb: 91 91 214;
     --status-line-rgb: 6 199 85;
+    --status-warn-ink: #e9b53f;
   }
 }
 
 :root[data-theme='dark'] {
-  --ink-900: #f2f3f1;
-  --ink-700: #cdd0cc;
-  --ink-500: #9aa0a6;
-  --ink-300: #5b6067;
-  --line-100: #2a2d30;
-  --line-300: #3a3f45;
+  --ink-900: #f3f4f1;
+  --ink-700: #c7cbcf;
+  --ink-500: #8a9096;
+  --ink-300: #4a5057;
+  --line-100: #282d32;
+  --line-300: #3a4046;
 
-  --bg: #121416;
-  --surface: #1a1d20;
-  --surface-2: color-mix(in oklab, white 4%, #1a1d20);
+  --paper: #0b0d0f;
+  --surface: #15181c;
+  --surface-2: #1b1f23;
+  --surface-3: #22262b;
+  --bg: var(--paper);
   --fg: var(--ink-900);
   --fg-muted: var(--ink-500);
 
@@ -141,6 +167,7 @@
   --status-info-rgb: 47 111 235;
   --status-pay-onsite-rgb: 91 91 214;
   --status-line-rgb: 6 199 85;
+  --status-warn-ink: #e9b53f;
 }
 
 @layer base {

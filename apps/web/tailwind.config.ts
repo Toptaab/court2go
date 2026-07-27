@@ -42,6 +42,9 @@ const config: Config = {
           // opacity modifier to (see components/ui/badge.tsx).
           ok: 'rgb(var(--status-ok-rgb) / <alpha-value>)',
           warn: 'rgb(var(--status-warn-rgb) / <alpha-value>)',
+          // Darkened ink for warn text on the soft chip tint (light/dark
+          // handled in globals.css). Opaque — no alpha modifier needed.
+          'warn-ink': 'var(--status-warn-ink)',
           danger: 'rgb(var(--status-danger-rgb) / <alpha-value>)',
           info: 'rgb(var(--status-info-rgb) / <alpha-value>)',
           'pay-onsite': 'rgb(var(--status-pay-onsite-rgb) / <alpha-value>)',
@@ -58,8 +61,12 @@ const config: Config = {
           300: 'var(--line-300)',
         },
         bg: 'var(--bg)',
+        // `paper` = page/app-shell background; `surface` = card floating on it.
+        // Keep them distinct — never collapse page bg onto card surface.
+        paper: 'var(--paper)',
         surface: 'var(--surface)',
         'surface-2': 'var(--surface-2)',
+        'surface-3': 'var(--surface-3)',
         fg: 'var(--fg)',
         'fg-muted': 'var(--fg-muted)',
       },
@@ -69,7 +76,14 @@ const config: Config = {
         mono: ['var(--mono)'],
       },
       borderRadius: {
+        // Mockup radius scale (globals.css --r-*). `sm/md/lg` were unused by
+        // any component, so mapping them onto the mockup ramp (7/10/14px) is
+        // regression-free; `card` and Tailwind's `full`/`DEFAULT` are kept.
         card: '0.75rem',
+        sm: 'var(--r-sm)',
+        md: 'var(--r-md)',
+        lg: 'var(--r-lg)',
+        pill: 'var(--pill)',
       },
     },
   },

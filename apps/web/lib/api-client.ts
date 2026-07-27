@@ -1,4 +1,4 @@
-import type { ZodType } from 'zod';
+import type { ZodType, ZodTypeDef } from 'zod';
 import type { ApiErrorCode, ErrorEnvelope } from '@repo/types';
 import { parseErrorEnvelope } from './error';
 
@@ -95,10 +95,23 @@ async function throwForErrorResponse(res: Response): Promise<never> {
  * Fetch + zod-parse a JSON response. `schema` is mandatory and deliberate —
  * ARCHITECTURE §3.2's "fail loudly on contract drift instead of passing
  * malformed data into the UI" (a `schema.parse` throw here IS that failure).
+ *
+ * The schema param is typed `ZodType<T, ZodTypeDef, any>` rather than the
+ * shorthand `ZodType<T>` (which defaults its Input param to `T` too) —
+ * `T` here should only ever bind to a schema's OUTPUT shape (what a parsed
+ * response actually looks like); a response schema with a `.default(...)`
+ * field (e.g. `configSchema`'s `cancellationCutoffHours`, M10.10) has an
+ * Input type that differs from its Output type (the field is optional
+ * going in, always-present coming out), and pinning Input to match Output
+ * as well makes such a schema fail to typecheck as a `ZodType<T>` argument
+ * at all. Loosening only the unused Input slot to `any` fixes that without
+ * changing what `T` (and thus every existing caller's inferred response
+ * type) resolves to.
  */
 export async function apiFetch<T>(
   path: string,
-  schema: ZodType<T>,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Input slot deliberately loosened, see doc comment above
+  schema: ZodType<T, ZodTypeDef, any>,
   options: ApiFetchOptions = {},
 ): Promise<T> {
   const res = await rawFetch(path, options);

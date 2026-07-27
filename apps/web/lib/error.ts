@@ -158,13 +158,32 @@ const GENERIC_FALLBACK: Bilingual = {
  * Resolution order: known `error.code` → bilingual copy above; unrecognized
  * but well-formed envelope → the envelope's own `message` (server DTOs
  * document this as "safe to display"); anything else → generic fallback.
+ *
+ * Handles `ApiClientError` (lib/api-client.ts) directly via its `.envelope`
+ * property, bypassing the generic `parseErrorEnvelope` heuristic.
  */
 export function messageForError(err: unknown): string {
-  const envelope = parseErrorEnvelope(err);
+  // Fast path: ApiClientError carries the parsed envelope already.
+  const directEnvelope = extractEnvelopeFromApiClientError(err);
+  const envelope = directEnvelope ?? parseErrorEnvelope(err);
   if (envelope) {
     const copy = ERROR_COPY[envelope.error.code as ApiErrorCode];
     if (copy) return formatBilingual(copy);
     if (envelope.error.message) return envelope.error.message;
   }
   return formatBilingual(GENERIC_FALLBACK);
+}
+
+/** Extract the envelope from an ApiClientError without importing the class (avoid circular). */
+function extractEnvelopeFromApiClientError(err: unknown): ErrorEnvelope | null {
+  if (
+    err !== null &&
+    typeof err === 'object' &&
+    'name' in err &&
+    (err as { name: string }).name === 'ApiClientError' &&
+    'envelope' in err
+  ) {
+    return (err as { envelope: ErrorEnvelope | null }).envelope;
+  }
+  return null;
 }

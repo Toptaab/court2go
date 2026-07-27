@@ -19,4 +19,63 @@ export const queryKeys = {
   me: () => ['auth', 'member', 'me'] as const,
   adminMe: () => ['auth', 'admin', 'me'] as const,
   publicTenant: (slug: string) => ['public', 'tenant', slug] as const,
+
+  // --- Public catalog (M10.3) ---
+  news: (slug: string, page?: number) => ['public', slug, 'news', { page }] as const,
+  newsDetail: (slug: string, newsId: string) => ['public', slug, 'news', newsId] as const,
+  branches: (slug: string) => ['public', slug, 'branches'] as const,
+  sports: (slug: string, branchId: string) => ['public', slug, 'branches', branchId, 'sports'] as const,
+  courts: (slug: string, branchId: string) => ['public', slug, 'branches', branchId, 'courts'] as const,
+  courtDetail: (slug: string, courtId: string) => ['public', slug, 'courts', courtId] as const,
+  availability: (slug: string, courtId: string, date: string) =>
+    ['public', slug, 'courts', courtId, 'availability', date] as const,
+
+  // --- Member bookings (M10.5) ---
+  bookingDetail: (bookingId: string) => ['member', 'bookings', bookingId] as const,
+  myBookings: (scope?: string, page?: number) => ['member', 'bookings', 'list', { scope, page }] as const,
+
+  // --- Admin (M10.7) ---
+  adminBookings: (params: Record<string, unknown>) => ['admin', 'bookings', 'list', params] as const,
+  /** Prefix shared by every `adminBookings(params)` key — invalidate this (M10.8 booking-action
+   * hooks) to refresh the list/queue pages regardless of their current filter params. */
+  adminBookingsListPrefix: () => ['admin', 'bookings', 'list'] as const,
+  adminCalendar: (branchId: string, date: string) => ['admin', 'bookings', 'calendar', branchId, date] as const,
+  /** Prefix shared by every `adminCalendar(branchId, date)` key. */
+  adminCalendarPrefix: () => ['admin', 'bookings', 'calendar'] as const,
+  adminBookingDetail: (bookingId: string) => ['admin', 'bookings', bookingId] as const,
+
+  // --- Admin catalog (M10.9) ---
+  adminBranches: () => ['admin', 'catalog', 'branches', 'list'] as const,
+  adminBranchDetail: (branchId: string) => ['admin', 'catalog', 'branches', branchId] as const,
+  adminSports: () => ['admin', 'catalog', 'sports', 'list'] as const,
+  adminCourts: (branchId?: string) => ['admin', 'catalog', 'courts', 'list', { branchId }] as const,
+  /** Prefix shared by every `adminCourts(branchId)` key — invalidate regardless of the current branch filter. */
+  adminCourtsListPrefix: () => ['admin', 'catalog', 'courts', 'list'] as const,
+  adminCourtDetail: (courtId: string) => ['admin', 'catalog', 'courts', courtId] as const,
+  adminCourtBlocks: (courtId: string) => ['admin', 'catalog', 'courts', courtId, 'blocks'] as const,
+
+  // --- Admin misc (M10.10) ---
+  adminPromotions: () => ['admin', 'promotions', 'list'] as const,
+  adminPromotionDetail: (promotionId: string) => ['admin', 'promotions', promotionId] as const,
+  adminPromotionUsage: (promotionId: string, page?: number) =>
+    ['admin', 'promotions', promotionId, 'usage', { page }] as const,
+
+  adminNews: (page?: number) => ['admin', 'news', 'list', { page }] as const,
+  /** Prefix shared by every `adminNews(page)` key. */
+  adminNewsListPrefix: () => ['admin', 'news', 'list'] as const,
+  adminNewsDetail: (newsId: string) => ['admin', 'news', newsId] as const,
+
+  adminMembers: (params: Record<string, unknown>) => ['admin', 'members', 'list', params] as const,
+  /** Prefix shared by every `adminMembers(params)` key. */
+  adminMembersListPrefix: () => ['admin', 'members', 'list'] as const,
+  adminMemberDetail: (memberId: string) => ['admin', 'members', memberId] as const,
+  adminMemberBookings: (memberId: string, page?: number) =>
+    ['admin', 'members', memberId, 'bookings', { page }] as const,
+
+  adminConfig: () => ['admin', 'settings', 'config'] as const,
+  adminBranding: () => ['admin', 'settings', 'branding'] as const,
+
+  adminUsers: () => ['admin', 'admin-users', 'list'] as const,
+  adminUserDetail: (adminUserId: string) => ['admin', 'admin-users', adminUserId] as const,
+  adminRolesMatrix: () => ['admin', 'roles-matrix'] as const,
 };
