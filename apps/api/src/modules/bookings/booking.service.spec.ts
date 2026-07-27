@@ -188,6 +188,7 @@ function build() {
     findByIdWithPayment: jest.fn(),
     transitionStatus: jest.fn(),
     updatePricing: jest.fn(),
+    modifySlots: jest.fn(),
     findActiveSlots: jest.fn().mockResolvedValue([]),
     listForMember: jest.fn().mockResolvedValue([]),
     countForMember: jest.fn().mockResolvedValue(0),
@@ -812,6 +813,52 @@ describe('BookingService.requestCancellation', () => {
       member: makeMember({ id: 'someone-else' }),
     } as any);
     await expect(deps.service.requestCancellation(BOOKING_ID, MEMBER_ID)).rejects.toMatchObject({ code: 'NOT_FOUND' });
+  });
+});
+
+describe('BookingService.adminModify', () => {
+  beforeEach(() => {
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date('2026-01-01T00:00:00.000Z'));
+  });
+  afterEach(() => jest.useRealTimers());
+
+  // Regression: modifySlots rewrites the Booking's price snapshot but never the
+  // Payment row, so adminModify must ALWAYS re-sync Payment.amountDue — even for
+  // a booking that never had a promo (the common case). A pure time move that
+  // flips off-peak -> peak changes the total, which must reach the payment.
+  it('re-syncs Payment.amountDue after a modify even with no prior promo', async () => {
+    const deps = build();
+    const court = makeCourt({
+      gridIntervalMinutes: 60,
+      maxSlots: 3,
+      basePricePerGridUnit: 10_000,
+      schedule: [{ day: 'MON', closed: false, openTime: '08:00', closeTime: '12:00' }],
+      peakTimeRanges: [
+        { id: 'peak-1', label: 'Peak', days: ['MON'], startTime: '09:00', endTime: '12:00', pricePerGridUnit: 20_000 },
+      ],
+    });
+    deps.courts.findById.mockResolvedValue(court);
+    deps.branches.findById.mockResolvedValue(makeBranch());
+    deps.sports.findById.mockResolvedValue(makeSport());
+    deps.members.findById.mockResolvedValue(makeMember());
+    deps.config.get.mockResolvedValue(makeConfig());
+    deps.bookings.modifySlots.mockResolvedValue(undefined as any);
+    deps.bookings.updatePricing.mockResolvedValue({} as any);
+    deps.bookings.findByIdWithPayment.mockResolvedValue({
+      ...makeBooking({ status: 'PENDING_PAYMENT', startsAt: ict(DATE, '09:00'), totalAmount: 20_000 }),
+      payment: makePayment({ status: 'AWAITING_SLIP_UPLOAD', amountDue: 20_000 }),
+      member: makeMember(),
+    } as any);
+
+    // Original booking: off-peak 08:00 @ 10_000, NO promo. Move to peak 09:00.
+    const original = makeBooking({ status: 'PENDING_PAYMENT', appliedPromotionId: null });
+    await deps.service.adminModify(original, { start: ict(DATE, '09:00').toISOString() } as any, 'admin-1');
+
+    expect(deps.bookings.updatePricing).toHaveBeenCalledWith(
+      BOOKING_ID,
+      expect.objectContaining({ totalAmount: 20_000, appliedPromotionId: null, promotionDiscountAmount: null }),
+    );
   });
 });
 

@@ -6,7 +6,7 @@ import {
   type BookingDetail,
   type BookingListItem,
 } from '@repo/types';
-import type { Booking, Member, Payment } from '../../generated/prisma/client';
+import type { Booking, BookingStatus, Member, Payment, PaymentStatus } from '../../generated/prisma/client';
 
 /** Row shape needed to render one `BookingListItem` (member.mapMemberToMe-style
  * mapping) — `listForMember`/`listForAdmin` both include `payment` + `member`. */
@@ -20,20 +20,68 @@ type PaymentCarrier = Pick<Booking, 'id' | 'branchPaymentMethod' | 'totalAmount'
 
 type AllowedAction = BookingDetail['allowedActions'][number];
 
+/** Actor computing the action set — MEMBER (client flows, default) or ADMIN
+ * (console). The two see disjoint action vocabularies; never mix them. */
+export type BookingActor = 'MEMBER' | 'ADMIN';
+
+/** Non-terminal statuses on which an admin may still modify/cancel (M9,
+ * ARCHITECTURE §5.2). Terminal (REJECTED/EXPIRED/CANCELLED/COMPLETED/NO_SHOW)
+ * and the pre-verification hold are excluded. */
+const ADMIN_MUTABLE_STATUSES: BookingStatus[] = [
+  'PENDING_PAYMENT',
+  'PENDING_PAYMENT_CONFIRMATION',
+  'CONFIRMED',
+  'CANCELLATION_REQUESTED',
+];
+
+/** Booking statuses from which a payment confirm is legal (mirrors
+ * `PaymentService.CONFIRMABLE_BOOKING_STATUSES`). */
+const ADMIN_CONFIRMABLE_STATUSES: BookingStatus[] = ['PENDING_PAYMENT', 'PENDING_PAYMENT_CONFIRMATION'];
+
 /**
- * Actions the MEMBER actor may take on a booking (server-computed,
- * PRD C4.2/C4.3 + M6 build note). Admin actions are M9 — omitted here.
+ * Actions the given actor may take on a booking (server-computed).
  *
+ * MEMBER (PRD C4.2/C4.3):
  *  - REQUEST_CANCELLATION: status=CONFIRMED and `now` is still more than
  *    `cancellationCutoffHours` before `startsAt`.
  *  - UPLOAD_SLIP: status=PENDING_PAYMENT on a QR_CODE branch (Pay-Onsite
  *    bookings never reach PENDING_PAYMENT at all).
+ *
+ * ADMIN (PRD A2, M9): payment confirm/reject on the review queue, modify/cancel
+ * on any non-terminal booking, approve/decline a pending cancellation request,
+ * and mark a CONFIRMED booking's outcome (completed/no-show). Enforcement still
+ * lives in the services — this set only drives which buttons the console shows.
  */
 export function computeAllowedActions(
   booking: Pick<Booking, 'status' | 'startsAt' | 'branchPaymentMethod'>,
   now: Date,
   cancellationCutoffHours: number,
+  opts?: { actor?: BookingActor; paymentStatus?: PaymentStatus | null },
 ): AllowedAction[] {
+  const actor = opts?.actor ?? 'MEMBER';
+
+  if (actor === 'ADMIN') {
+    const actions: AllowedAction[] = [];
+    const paymentConfirmable = opts?.paymentStatus == null || opts.paymentStatus !== 'CONFIRMED';
+
+    if (ADMIN_CONFIRMABLE_STATUSES.includes(booking.status) && paymentConfirmable) {
+      actions.push('ADMIN_CONFIRM_PAYMENT');
+    }
+    if (booking.status === 'PENDING_PAYMENT_CONFIRMATION') {
+      actions.push('ADMIN_REJECT_PAYMENT');
+    }
+    if (ADMIN_MUTABLE_STATUSES.includes(booking.status)) {
+      actions.push('ADMIN_MODIFY', 'ADMIN_CANCEL');
+    }
+    if (booking.status === 'CANCELLATION_REQUESTED') {
+      actions.push('ADMIN_APPROVE_CANCELLATION', 'ADMIN_DECLINE_CANCELLATION');
+    }
+    if (booking.status === 'CONFIRMED') {
+      actions.push('ADMIN_MARK_COMPLETED', 'ADMIN_MARK_NO_SHOW');
+    }
+    return actions;
+  }
+
   const actions: AllowedAction[] = [];
 
   if (booking.status === 'CONFIRMED') {
@@ -106,7 +154,7 @@ export function mapToBookingDetail(
   booking: Booking,
   payment: Payment | null,
   member: Pick<Member, 'id' | 'phone' | 'name' | 'phoneVerified'>,
-  opts: { now: Date; cancellationCutoffHours: number },
+  opts: { now: Date; cancellationCutoffHours: number; actor?: BookingActor },
 ): BookingDetail {
   return bookingDetailSchema.parse({
     id: booking.id,
@@ -138,7 +186,10 @@ export function mapToBookingDetail(
       name: member.name,
       phoneVerified: member.phoneVerified,
     },
-    allowedActions: computeAllowedActions(booking, opts.now, opts.cancellationCutoffHours),
+    allowedActions: computeAllowedActions(booking, opts.now, opts.cancellationCutoffHours, {
+      actor: opts.actor ?? 'MEMBER',
+      paymentStatus: payment?.status ?? null,
+    }),
   });
 }
 

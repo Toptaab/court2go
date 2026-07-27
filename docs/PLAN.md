@@ -59,8 +59,23 @@ Pay-Onsite auto-confirm; QR: dynamic PromptPay EMVCo payload, slip upload-url + 
 ## M8 — Admin auth + RBAC ⬜
 `admin/auth/login|logout`, `admin/me`, role guards (Owner/Admin/Branch Admin), branch-scope enforcement.
 
-## M9 — Admin bookings + catalog + promotions + news + config/branding ⬜
-Full admin surface per openapi `/admin/**`.
+## M9 — Admin bookings + catalog + promotions + news + config/branding 🟡
+Full admin surface per openapi `/admin/**`. **No data/contract work** — every repository is prisma-data pre-built (`listForAdmin`, `listForCalendar`, `listAdmin`, `softDelete`, `setActive`, `hasFutureBookings`, `createBlock`/`deleteBlock`, `promotions.usageForPromotion`/`redeem`, `admin-users` CRUD, `members.listAdmin` with branch-scoping, `config.get/update`, `tenants.updateBranding`) and every DTO already lives in `packages/types` (`dto/admin-booking.ts`, `dto/admin-catalog.ts`, `dto/admin-misc.ts`). Bind to them; no api-designer / prisma-data.
+
+**Reuse (do NOT rebuild):** M8 RBAC — `AdminSessionGuard`, `@Roles()`/`RolesGuard`, `@CurrentAdmin()`, `assertBranchScope(adminUser, resourceBranchId)`, `@BranchScoped()`/`BranchScopeGuard` (all exported from `AuthAdminModule`). M7 payment — `PaymentService.adminConfirmPayment/adminRejectPayment/issueSlipViewUrl` (authoritative txns already unit-tested; consume the `// TODO(M8/M9)` marker). M6 booking repo — `modifySlots`, `transitionStatus`, `createHold`, `redeemPromotionWithTx`. Booking mapper — `mapToBookingDetail`/`mapToBookingListItem`; extend `computeAllowedActions` to add the ADMIN_* actions (mapper note explicitly defers them here — enum already in contract, no contract change).
+
+**Guard discipline:** every `/admin/**` route behind `AdminSessionGuard` + `RolesGuard`. Branch-scoped routes (bookings, courts, blocks, member views, payment actions) enforce `assertBranchScope` against the resource's `branchId` (Owner/Admin tenant-wide; Branch-Admin scoped) — 403 `BRANCH_SCOPE_DENIED` per contract (GET /admin/bookings/{id} documents 403). Admin-user CRUD role rules per ADR-0005 (`AdminUsersService.remove` refuses OWNER always, ADMIN unless actor is OWNER; only OWNER/ADMIN create). Audit row on every state change.
+
+**Build slices (one coherent backend pass, module-local repos already exist):**
+1. **Admin bookings** — `AdminBookingsModule`: list (filterable, branch-scoped) · calendar · detail · walk-in POST · modify PATCH · cancel · outcome (COMPLETED/NO_SHOW) · cancellation-decision (APPROVE releases slots — M6 carryover) · wire the 3 payment controllers (confirm/reject/slip-url) onto the existing `PaymentService` admin methods behind the guards + branch-scope. Extend `computeAllowedActions` for ADMIN_* actions.
+2. **Admin catalog** — `AdminCatalogModule`: branches (list/get/create/patch/delete+deactivate) · sports · courts (branch-scoped, +blocks list/create/delete) — bind to catalog repos + `catalog` admin mappers.
+3. **Admin promotions** — list/create/patch/delete/deactivate + usage (paginated).
+4. **Admin news** — paginated list/create/patch/delete.
+5. **Admin members** — list (q, branch-scoped)/detail/bookings/block.
+6. **Admin config/branding/uploads** — `GET/PUT /admin/config` (Config row), `GET/PUT /admin/branding` (Tenant record via `updateBranding`), `POST /admin/uploads/image-url` (public-read presigned PUT; publicUrl derived deterministically from the public key — real S3 binding is M11).
+7. **Admin users / roles** — `/admin/admin-users` CRUD (ADR-0005 role rules) + `/admin/roles-matrix` (static capability map).
+
+**Exit:** typecheck clean across workspaces, `apps/api` jest green, reviewer no blockers.
 
 ## M10 — apps/web (Next.js) ⬜
 App Router, TanStack Query, Tailwind + shadcn, bound to Claude Design pages + `@repo/types`. Client booking flow + admin console.

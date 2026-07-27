@@ -13,6 +13,19 @@ import { getTenantId } from '../../prisma/tenant-context';
 import { isUniqueConstraintViolation } from '../../prisma/prisma-errors';
 import { SlotUnavailableError, PromotionCapReachedError } from './errors';
 
+/** Filters shared by the admin booking list + its paired count (M9, PRD A2.1). */
+export interface AdminBookingFilters {
+  branchId?: string;
+  sportId?: string;
+  courtId?: string;
+  status?: BookingStatus;
+  paymentStatus?: PaymentStatus;
+  dateFrom?: Date;
+  dateTo?: Date;
+  memberPhone?: string;
+  memberId?: string;
+}
+
 /**
  * Everything a caller (BookingService, owned by nestjs-backend) must supply
  * to open a Hold. Pricing (`priceBreakdown`/amounts), the fixed-30-min
@@ -571,34 +584,33 @@ export class BookingsRepository {
     );
   }
 
-  async listForAdmin(filters: {
-    branchId?: string;
-    sportId?: string;
-    courtId?: string;
-    status?: BookingStatus;
-    dateFrom?: Date;
-    dateTo?: Date;
-    memberPhone?: string;
-    skip: number;
-    take: number;
-  }) {
+  /** Shared `where` for the admin booking list/count (PRD A2.1, D2). `paymentStatus`
+   * filters the review/refund queues; `memberPhone` is a partial contains match
+   * (search box, A2.1 AC2); `memberId` powers the per-member booking history. */
+  private adminWhere(filters: AdminBookingFilters): Prisma.BookingWhereInput {
+    return {
+      ...(filters.branchId ? { branchId: filters.branchId } : {}),
+      ...(filters.sportId ? { sportId: filters.sportId } : {}),
+      ...(filters.courtId ? { courtId: filters.courtId } : {}),
+      ...(filters.status ? { status: filters.status } : {}),
+      ...(filters.paymentStatus ? { payment: { status: filters.paymentStatus } } : {}),
+      ...(filters.memberId ? { memberId: filters.memberId } : {}),
+      ...(filters.dateFrom || filters.dateTo
+        ? {
+            startsAt: {
+              ...(filters.dateFrom ? { gte: filters.dateFrom } : {}),
+              ...(filters.dateTo ? { lte: filters.dateTo } : {}),
+            },
+          }
+        : {}),
+      ...(filters.memberPhone ? { member: { phone: { contains: filters.memberPhone } } } : {}),
+    };
+  }
+
+  async listForAdmin(filters: AdminBookingFilters & { skip: number; take: number }) {
     return this.prisma.withTenant((tx) =>
       tx.booking.findMany({
-        where: {
-          ...(filters.branchId ? { branchId: filters.branchId } : {}),
-          ...(filters.sportId ? { sportId: filters.sportId } : {}),
-          ...(filters.courtId ? { courtId: filters.courtId } : {}),
-          ...(filters.status ? { status: filters.status } : {}),
-          ...(filters.dateFrom || filters.dateTo
-            ? {
-                startsAt: {
-                  ...(filters.dateFrom ? { gte: filters.dateFrom } : {}),
-                  ...(filters.dateTo ? { lte: filters.dateTo } : {}),
-                },
-              }
-            : {}),
-          ...(filters.memberPhone ? { member: { phone: filters.memberPhone } } : {}),
-        },
+        where: this.adminWhere(filters),
         include: { payment: true, member: true },
         orderBy: { startsAt: 'asc' },
         skip: filters.skip,
@@ -607,12 +619,17 @@ export class BookingsRepository {
     );
   }
 
+  /** Paired count for `listForAdmin`'s pagination envelope. */
+  async countForAdmin(filters: AdminBookingFilters): Promise<number> {
+    return this.prisma.withTenant((tx) => tx.booking.count({ where: this.adminWhere(filters) }));
+  }
+
   /** Calendar view (PRD A1) — all bookings for one branch/date, across courts. */
   async listForCalendar(branchId: string, dayStart: Date, dayEnd: Date) {
     return this.prisma.withTenant((tx) =>
       tx.booking.findMany({
         where: { branchId, startsAt: { gte: dayStart, lt: dayEnd } },
-        include: { payment: true },
+        include: { payment: true, member: { select: { phone: true, name: true } } },
         orderBy: [{ courtId: 'asc' }, { startsAt: 'asc' }],
       }),
     );
