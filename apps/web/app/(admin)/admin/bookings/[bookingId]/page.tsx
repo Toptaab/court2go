@@ -6,10 +6,12 @@ import { formatTHB, formatIctDate, formatIctTime, formatIctDateTime } from '@/li
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { BookingStatusBadge, PaymentStatusBadge } from '@/components/ui/badge';
+import { BookingActions } from '@/components/admin/booking-actions';
 
 /**
  * Admin booking detail (Design D2 detail). Shows full booking info + payment
- * + member info. Action buttons (confirm/reject/cancel/outcome) land in M10.8.
+ * + member info, plus the M10.8 action controls (confirm/reject payment,
+ * cancel, outcome, cancellation decision) gated on `booking.allowedActions`.
  */
 export default function AdminBookingDetailPage() {
   const params = useParams<{ bookingId: string }>();
@@ -127,11 +129,8 @@ export default function AdminBookingDetailPage() {
         </CardContent>
       </Card>
 
-      {/* Actions placeholder — M10.8 adds confirm/reject/cancel/outcome buttons here */}
-      <div className="rounded-card border border-line-100 bg-surface-2 p-4 text-center text-xs text-fg-muted">
-        การดำเนินการ (confirm, reject, cancel, outcome) จะเพิ่มใน M10.8 /
-        Actions coming in M10.8.
-      </div>
+      {/* Actions (M10.8) */}
+      <BookingActions booking={booking} />
     </div>
   );
 }

@@ -36,6 +36,11 @@ export const queryKeys = {
 
   // --- Admin (M10.7) ---
   adminBookings: (params: Record<string, unknown>) => ['admin', 'bookings', 'list', params] as const,
+  /** Prefix shared by every `adminBookings(params)` key — invalidate this (M10.8 booking-action
+   * hooks) to refresh the list/queue pages regardless of their current filter params. */
+  adminBookingsListPrefix: () => ['admin', 'bookings', 'list'] as const,
   adminCalendar: (branchId: string, date: string) => ['admin', 'bookings', 'calendar', branchId, date] as const,
+  /** Prefix shared by every `adminCalendar(branchId, date)` key. */
+  adminCalendarPrefix: () => ['admin', 'bookings', 'calendar'] as const,
   adminBookingDetail: (bookingId: string) => ['admin', 'bookings', bookingId] as const,
 };
