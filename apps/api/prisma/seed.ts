@@ -78,7 +78,7 @@ async function main() {
   });
 
   // Owner AdminUser (PRD A9.1 AC1) — dev-only credentials, never used in prod.
-  const ownerEmail = 'owner@baseline-club.test';
+  const ownerEmail = 'court2go@gmail.com';
   const existingOwner = await prisma.adminUser.findUnique({
     where: { tenantId_email: { tenantId: tenant.id, email: ownerEmail } },
   });
@@ -87,7 +87,7 @@ async function main() {
       data: {
         tenantId: tenant.id,
         email: ownerEmail,
-        passwordHash: hashPassword('dev-password-change-me'),
+        passwordHash: hashPassword('admin@123'),
         name: 'Baseline Club Owner',
         role: Role.OWNER,
         branchId: null,
