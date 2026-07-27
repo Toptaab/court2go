@@ -19,4 +19,14 @@ export const queryKeys = {
   me: () => ['auth', 'member', 'me'] as const,
   adminMe: () => ['auth', 'admin', 'me'] as const,
   publicTenant: (slug: string) => ['public', 'tenant', slug] as const,
+
+  // --- Public catalog (M10.3) ---
+  news: (slug: string, page?: number) => ['public', slug, 'news', { page }] as const,
+  newsDetail: (slug: string, newsId: string) => ['public', slug, 'news', newsId] as const,
+  branches: (slug: string) => ['public', slug, 'branches'] as const,
+  sports: (slug: string, branchId: string) => ['public', slug, 'branches', branchId, 'sports'] as const,
+  courts: (slug: string, branchId: string) => ['public', slug, 'branches', branchId, 'courts'] as const,
+  courtDetail: (slug: string, courtId: string) => ['public', slug, 'courts', courtId] as const,
+  availability: (slug: string, courtId: string, date: string) =>
+    ['public', slug, 'courts', courtId, 'availability', date] as const,
 };
