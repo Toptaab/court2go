@@ -43,4 +43,14 @@ export const queryKeys = {
   /** Prefix shared by every `adminCalendar(branchId, date)` key. */
   adminCalendarPrefix: () => ['admin', 'bookings', 'calendar'] as const,
   adminBookingDetail: (bookingId: string) => ['admin', 'bookings', bookingId] as const,
+
+  // --- Admin catalog (M10.9) ---
+  adminBranches: () => ['admin', 'catalog', 'branches', 'list'] as const,
+  adminBranchDetail: (branchId: string) => ['admin', 'catalog', 'branches', branchId] as const,
+  adminSports: () => ['admin', 'catalog', 'sports', 'list'] as const,
+  adminCourts: (branchId?: string) => ['admin', 'catalog', 'courts', 'list', { branchId }] as const,
+  /** Prefix shared by every `adminCourts(branchId)` key — invalidate regardless of the current branch filter. */
+  adminCourtsListPrefix: () => ['admin', 'catalog', 'courts', 'list'] as const,
+  adminCourtDetail: (courtId: string) => ['admin', 'catalog', 'courts', courtId] as const,
+  adminCourtBlocks: (courtId: string) => ['admin', 'catalog', 'courts', courtId, 'blocks'] as const,
 };

@@ -25,6 +25,23 @@ export function ictDateOptions(count: number): string[] {
   return dates;
 }
 
+/**
+ * `<input type="datetime-local">` wall-clock string (`YYYY-MM-DDTHH:mm`) →
+ * UTC ISO instant, treating the input as ICT (fixed UTC+7 — CLAUDE.md
+ * "Timezone" invariant) regardless of the browser/OS local timezone.
+ *
+ * `new Date(localDateTime).toISOString()` is WRONG here: it parses the
+ * wall-clock string in the browser's LOCAL timezone, so an admin whose OS
+ * clock isn't Asia/Bangkok would create the block for the wrong UTC window
+ * (court-blocks maintenance windows, PRD A5.1 AC5).
+ */
+export function ictLocalToUtcIso(localDateTime: string): string {
+  const [datePart, timePart] = localDateTime.split('T');
+  const [y, mo, d] = datePart.split('-').map(Number);
+  const [h, mi] = timePart.split(':').map(Number);
+  return new Date(Date.UTC(y, mo - 1, d, h, mi) - 7 * 60 * 60 * 1000).toISOString();
+}
+
 const THAI_DAY_NAMES = ['อา', 'จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส'];
 
 /** `YYYY-MM-DD` → short Thai-day-name label, e.g. `"จ 28/07"`. */

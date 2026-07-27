@@ -38,6 +38,26 @@ export function formatTHB(amountSatang: ThbAmount): string {
   return thbFormatter.format(amountSatang / 100);
 }
 
+/**
+ * `ThbAmount` (integer satang) → plain THB number string for a form input,
+ * e.g. `30000` → `"300.00"`. Pair with `thbInputToSatang` at the same field
+ * — catalog editors (M10.9) are the only place `apps/web` round-trips a
+ * satang amount through an editable number input rather than only displaying it.
+ */
+export function satangToThbInput(amountSatang: ThbAmount): string {
+  return (amountSatang / 100).toFixed(2);
+}
+
+/**
+ * THB form-input string → integer satang (`ThbAmount`), e.g. `"300"` → `30000`.
+ * Rounds to the nearest satang — never trust float THB arithmetic past 2dp.
+ * Returns `NaN` for an unparseable input; callers validate via the zod
+ * `thbAmountSchema` (int, non-negative) before submit either way.
+ */
+export function thbInputToSatang(input: string): number {
+  return Math.round(Number(input) * 100);
+}
+
 const ictDateFormatter = new Intl.DateTimeFormat('en-GB', {
   timeZone: ICT_TIME_ZONE,
   day: '2-digit',

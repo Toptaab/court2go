@@ -21,7 +21,13 @@ const NAV_ITEMS: NavItem[] = [
   { href: '/admin/walk-in', label: 'จองหน้างาน / Walk-in', roles: [] },
   { href: '/admin/payments', label: 'ตรวจสอบสลิป / Slip review', roles: [] },
   { href: '/admin/cancellations', label: 'คำขอยกเลิก / Cancellations', roles: [] },
-  { href: '/admin/catalog', label: 'สนาม / Catalog', roles: ['OWNER', 'ADMIN'] },
+  // Catalog (M10.9, PRD A3/A4/A5): Branches/Sports are Owner/Admin-only
+  // (Tenant-wide config, PRD A3.1/A4.1); Courts is visible to Branch-Admins
+  // too — A5.1 lets a Branch-Admin manage Courts within their own Branch
+  // (server enforces the actual scope via 403 BRANCH_SCOPE_DENIED).
+  { href: '/admin/catalog/branches', label: 'สาขา / Branches', roles: ['OWNER', 'ADMIN'] },
+  { href: '/admin/catalog/sports', label: 'กีฬา / Sports', roles: ['OWNER', 'ADMIN'] },
+  { href: '/admin/catalog/courts', label: 'สนาม / Courts', roles: [] },
   { href: '/admin/promotions', label: 'โปรโมชั่น / Promotions', roles: ['OWNER', 'ADMIN'] },
   { href: '/admin/news', label: 'ข่าวสาร / News', roles: ['OWNER', 'ADMIN'] },
   { href: '/admin/members', label: 'สมาชิก / Members', roles: [] },
