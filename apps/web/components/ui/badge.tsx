@@ -38,13 +38,11 @@ const badgeVariants = cva(
       variant: {
         ok: 'text-status-ok',
         // Darkened for contrast vs. the plain status-warn hex (DESIGN.md
-        // mockup): light `#8a5e08`, dark `#e9b53f`. Dark is picked up via
-        // the same two mechanisms `app/globals.css` uses for every other
-        // token — the OS `prefers-color-scheme: dark` media query and an
-        // explicit `[data-theme="dark"]` ancestor (`ThemeContainer`) —
-        // expressed here as arbitrary Tailwind variants since this hex
-        // pair isn't a shared token.
-        warn: "text-[#8a5e08] [@media(prefers-color-scheme:dark)]:text-[#e9b53f] [[data-theme='dark']_&]:text-[#e9b53f]",
+        // mockup). Light/dark values live in the shared `--status-warn-ink`
+        // token in `app/globals.css` (mapped to `status-warn-ink` in
+        // tailwind.config.ts), so this stays a single-source token reference
+        // like every other status color.
+        warn: 'text-status-warn-ink',
         danger: 'text-status-danger',
         info: 'text-status-info',
         'pay-onsite': 'text-status-pay-onsite',

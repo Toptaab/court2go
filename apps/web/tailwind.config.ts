@@ -42,6 +42,9 @@ const config: Config = {
           // opacity modifier to (see components/ui/badge.tsx).
           ok: 'rgb(var(--status-ok-rgb) / <alpha-value>)',
           warn: 'rgb(var(--status-warn-rgb) / <alpha-value>)',
+          // Darkened ink for warn text on the soft chip tint (light/dark
+          // handled in globals.css). Opaque — no alpha modifier needed.
+          'warn-ink': 'var(--status-warn-ink)',
           danger: 'rgb(var(--status-danger-rgb) / <alpha-value>)',
           info: 'rgb(var(--status-info-rgb) / <alpha-value>)',
           'pay-onsite': 'rgb(var(--status-pay-onsite-rgb) / <alpha-value>)',

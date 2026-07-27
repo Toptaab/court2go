@@ -52,6 +52,10 @@
   --status-info: #2f6feb;
   --status-pay-onsite: #5b5bd6;
   --status-line: #06c755;
+  /* Warn chip ink — the plain --status-warn hex is too light to read as
+     text on the soft chip tint, so it gets its own darkened ink token
+     (mockup): #8a5e08 light, overridden to #e9b53f in the dark blocks. */
+  --status-warn-ink: #8a5e08;
 
   /* RGB channels of the status colors above, for Tailwind's
      rgb(var(...) / <alpha-value>) opacity-modifier pattern. Same values in
@@ -132,6 +136,7 @@
     --status-info-rgb: 47 111 235;
     --status-pay-onsite-rgb: 91 91 214;
     --status-line-rgb: 6 199 85;
+    --status-warn-ink: #e9b53f;
   }
 }
 
@@ -162,6 +167,7 @@
   --status-info-rgb: 47 111 235;
   --status-pay-onsite-rgb: 91 91 214;
   --status-line-rgb: 6 199 85;
+  --status-warn-ink: #e9b53f;
 }
 
 @layer base {

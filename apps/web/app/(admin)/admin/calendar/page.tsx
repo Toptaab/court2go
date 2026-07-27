@@ -269,7 +269,7 @@ export default function AdminCalendarPage() {
               <span
                 aria-hidden
                 className={cn(
-                  'h-2.5 w-2.5 shrink-0 rounded-sm',
+                  'h-2.5 w-2.5 shrink-0 rounded-[3px]',
                   kind !== 'hatch' && EVENT_BLOCK_CLASSES[kind].split(' ')[0],
                 )}
                 style={kind === 'hatch' ? HATCH_BACKGROUND : undefined}
@@ -278,7 +278,7 @@ export default function AdminCalendarPage() {
             </span>
           ))}
           <span className="flex items-center gap-1.5">
-            <span aria-hidden className="h-2.5 w-2.5 shrink-0 rounded-sm bg-surface-3" />
+            <span aria-hidden className="h-2.5 w-2.5 shrink-0 rounded-[3px] bg-surface-3" />
             {formatBilingual({ th: 'นอกเวลาทำการ', en: 'Closed / outside operating hours' })}
           </span>
         </div>
