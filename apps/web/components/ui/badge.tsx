@@ -10,20 +10,47 @@ import { formatBilingual, type Bilingual } from '@/lib/copy';
  * `neutral` (no status opinion — e.g. terminal-but-unremarkable states).
  * These are the SAME six fixed status colors everywhere in the app —
  * never re-skinned by tenant or theme (docs/DESIGN.md).
+ *
+ * Chip look, per the `admin-console.html` mockup: borderless, with a
+ * leading 6px dot in the FULL-strength status color ahead of the label,
+ * and a soft tinted background — `color-mix(in oklab, <status>, #fff 84%)`
+ * — i.e. the status color mixed to ~16% strength against white, applied
+ * as an inline style (Tailwind can't express `color-mix()` as a static
+ * utility). `accent`/`neutral` carry no status meaning, so they keep
+ * their existing bordered/flat look and render without a dot.
  */
+const STATUS_VARIANTS = ['ok', 'warn', 'danger', 'info', 'pay-onsite', 'line'] as const;
+type StatusVariant = (typeof STATUS_VARIANTS)[number];
+
+function isStatusVariant(variant: string | null | undefined): variant is StatusVariant {
+  return !!variant && (STATUS_VARIANTS as readonly string[]).includes(variant);
+}
+
+/** `--status-<variant>` CSS custom property backing a status color, e.g. `pay-onsite` → `--status-pay-onsite`. */
+function statusVar(variant: StatusVariant) {
+  return `var(--status-${variant})`;
+}
+
 const badgeVariants = cva(
-  'inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-medium',
+  'inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium',
   {
     variants: {
       variant: {
-        ok: 'border-status-ok/30 bg-status-ok/10 text-status-ok',
-        warn: 'border-status-warn/30 bg-status-warn/10 text-status-warn',
-        danger: 'border-status-danger/30 bg-status-danger/10 text-status-danger',
-        info: 'border-status-info/30 bg-status-info/10 text-status-info',
-        'pay-onsite': 'border-status-pay-onsite/30 bg-status-pay-onsite/10 text-status-pay-onsite',
-        line: 'border-status-line/30 bg-status-line/10 text-status-line',
-        accent: 'border-accent/30 bg-accent-tint text-accent-ink',
-        neutral: 'border-line-300 bg-surface-2 text-fg-muted',
+        ok: 'text-status-ok',
+        // Darkened for contrast vs. the plain status-warn hex (DESIGN.md
+        // mockup): light `#8a5e08`, dark `#e9b53f`. Dark is picked up via
+        // the same two mechanisms `app/globals.css` uses for every other
+        // token — the OS `prefers-color-scheme: dark` media query and an
+        // explicit `[data-theme="dark"]` ancestor (`ThemeContainer`) —
+        // expressed here as arbitrary Tailwind variants since this hex
+        // pair isn't a shared token.
+        warn: "text-[#8a5e08] [@media(prefers-color-scheme:dark)]:text-[#e9b53f] [[data-theme='dark']_&]:text-[#e9b53f]",
+        danger: 'text-status-danger',
+        info: 'text-status-info',
+        'pay-onsite': 'text-status-pay-onsite',
+        line: 'text-status-line',
+        accent: 'border border-accent/30 bg-accent-tint text-accent-ink',
+        neutral: 'border border-line-300 bg-surface-2 text-fg-muted',
       },
     },
     defaultVariants: {
@@ -36,8 +63,30 @@ export interface BadgeProps
   extends HTMLAttributes<HTMLSpanElement>,
     VariantProps<typeof badgeVariants> {}
 
-export function Badge({ className, variant, ...props }: BadgeProps) {
-  return <span className={cn(badgeVariants({ variant }), className)} {...props} />;
+export function Badge({ className, variant, style, children, ...props }: BadgeProps) {
+  const resolvedVariant = variant ?? 'neutral';
+  const dotColor = isStatusVariant(resolvedVariant) ? statusVar(resolvedVariant) : null;
+
+  return (
+    <span
+      className={cn(badgeVariants({ variant }), className)}
+      style={
+        dotColor
+          ? { backgroundColor: `color-mix(in oklab, ${dotColor}, #fff 84%)`, ...style }
+          : style
+      }
+      {...props}
+    >
+      {dotColor ? (
+        <span
+          aria-hidden
+          className="h-1.5 w-1.5 shrink-0 rounded-full"
+          style={{ backgroundColor: dotColor }}
+        />
+      ) : null}
+      {children}
+    </span>
+  );
 }
 
 type BadgeVariant = NonNullable<BadgeProps['variant']>;
