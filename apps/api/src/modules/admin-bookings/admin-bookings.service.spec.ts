@@ -5,6 +5,7 @@ import type { AuditLogRepository } from '../audit/audit-log.repository';
 import type { BookingService } from '../bookings/booking.service';
 import type { CourtsRepository } from '../courts/courts.repository';
 import type { PaymentService } from '../payments/payment.service';
+import { ApiError } from '../../common/api-error';
 import { AdminBookingsService } from './admin-bookings.service';
 
 const uid = (n: string) => `00000000-0000-4000-8000-0000000000${n}`;
@@ -50,6 +51,7 @@ function build() {
     countForAdmin: jest.fn().mockResolvedValue(0),
     listForCalendar: jest.fn().mockResolvedValue([]),
     transitionStatus: jest.fn().mockResolvedValue(makeBooking()),
+    declineCancellationRequest: jest.fn().mockResolvedValue(makeBooking({ status: 'CONFIRMED' })),
   } as unknown as jest.Mocked<BookingsRepository>;
   const config = { get: jest.fn().mockResolvedValue({ cancellationCutoffHours: 2 }) } as unknown as jest.Mocked<ConfigRepository>;
   const audit = { record: jest.fn().mockResolvedValue(undefined) } as unknown as jest.Mocked<AuditLogRepository>;
@@ -114,15 +116,36 @@ describe('AdminBookingsService — state guards', () => {
     await expect(service.cancellationDecision(OWNER, uid('bc'), { decision: 'APPROVE' })).rejects.toMatchObject({ code: 'INVALID_STATE_TRANSITION' });
   });
 
-  it('APPROVE cancels + releases (CANCELLED), DECLINE restores to CONFIRMED', async () => {
+  it('APPROVE cancels + releases via the generic transitionStatus(CANCELLED)', async () => {
     const { service, bookings } = build();
     (bookings.findByIdWithPayment as jest.Mock).mockResolvedValue(recordFor({ status: 'CANCELLATION_REQUESTED' }));
     await service.cancellationDecision(OWNER, uid('bc'), { decision: 'APPROVE' });
     expect(bookings.transitionStatus).toHaveBeenCalledWith(uid('bc'), 'CANCELLED', expect.anything());
+  });
 
-    (bookings.transitionStatus as jest.Mock).mockClear();
-    await service.cancellationDecision(OWNER, uid('bc'), { decision: 'DECLINE' });
-    expect(bookings.transitionStatus).toHaveBeenCalledWith(uid('bc'), 'CONFIRMED', expect.anything());
+  it('DECLINE restores to CONFIRMED via the dedicated guarded repository method, never the generic transitionStatus', async () => {
+    const { service, bookings } = build();
+    (bookings.findByIdWithPayment as jest.Mock).mockResolvedValue(recordFor({ status: 'CANCELLATION_REQUESTED' }));
+    await service.cancellationDecision(OWNER, uid('bc'), { decision: 'DECLINE', reason: 'kept the slot' });
+    expect(bookings.declineCancellationRequest).toHaveBeenCalledWith({
+      bookingId: uid('bc'),
+      adminId: OWNER.id,
+      reason: 'kept the slot',
+    });
+    // The parallel-writer bug this guards against: DECLINE must never route
+    // through the unguarded, plain-`update` `transitionStatus` to set CONFIRMED.
+    expect(bookings.transitionStatus).not.toHaveBeenCalled();
+  });
+
+  it('surfaces a 409 INVALID_STATE_TRANSITION when the guarded decline-restore loses a race', async () => {
+    const { service, bookings } = build();
+    (bookings.findByIdWithPayment as jest.Mock).mockResolvedValue(recordFor({ status: 'CANCELLATION_REQUESTED' }));
+    (bookings.declineCancellationRequest as jest.Mock).mockRejectedValue(
+      ApiError.conflict('INVALID_STATE_TRANSITION', 'No pending cancellation request on this booking'),
+    );
+    await expect(service.cancellationDecision(OWNER, uid('bc'), { decision: 'DECLINE' })).rejects.toMatchObject({
+      code: 'INVALID_STATE_TRANSITION',
+    });
   });
 });
 

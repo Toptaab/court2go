@@ -20,8 +20,8 @@ export class AdminBranchesController {
   constructor(private readonly service: AdminCatalogService) {}
 
   @Get()
-  list(): Promise<BranchDto[]> {
-    return this.service.listBranches();
+  list(@CurrentAdmin() admin: AdminAuthContext): Promise<BranchDto[]> {
+    return this.service.listBranches(admin.adminUser);
   }
 
   @Post()
@@ -34,8 +34,8 @@ export class AdminBranchesController {
   }
 
   @Get(':id')
-  get(@Param('id') id: string): Promise<BranchDto> {
-    return this.service.getBranch(id);
+  get(@CurrentAdmin() admin: AdminAuthContext, @Param('id') id: string): Promise<BranchDto> {
+    return this.service.getBranch(admin.adminUser, id);
   }
 
   @Patch(':id')

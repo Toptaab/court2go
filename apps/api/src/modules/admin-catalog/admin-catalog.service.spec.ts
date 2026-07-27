@@ -17,7 +17,7 @@ const FULL_SCHEDULE = DAYS.map((day) => ({ day, closed: false, openTime: '08:00'
 
 function build() {
   const branches = {
-    listAdmin: jest.fn(),
+    listAdmin: jest.fn().mockResolvedValue([]),
     findById: jest.fn(),
     create: jest.fn(),
     update: jest.fn(),
@@ -34,6 +34,7 @@ function build() {
     setActive: jest.fn(),
     softDelete: jest.fn(),
     hasFutureBookings: jest.fn().mockResolvedValue(false),
+    deleteBlockScoped: jest.fn().mockResolvedValue(1),
   } as unknown as jest.Mocked<CourtsRepository>;
   const audit = { record: jest.fn().mockResolvedValue(undefined) } as unknown as jest.Mocked<AuditLogRepository>;
   return { service: new AdminCatalogService(branches, sports, courts, audit), branches, courts, audit };
@@ -41,8 +42,14 @@ function build() {
 
 const branchRow = (over: any = {}) => ({
   id: BRANCH_A,
+  name: 'Branch A',
+  address: '123 Somewhere Rd',
+  paymentMethod: 'PAY_ONSITE',
+  promptPayId: null,
+  businessHours: FULL_SCHEDULE,
   isActive: true,
   deletedAt: null,
+  createdAt: new Date('2026-01-01T00:00:00.000Z'),
   ...over,
 });
 
@@ -136,5 +143,62 @@ describe('AdminCatalogService — court branch scope', () => {
     const { service, courts } = build();
     await service.listCourts(BRANCH_ADMIN, undefined);
     expect(courts.listAdmin).toHaveBeenCalledWith({ branchId: BRANCH_A });
+  });
+});
+
+describe('AdminCatalogService — deleteBlock IDOR guard', () => {
+  it('deletes a block that is scoped to the given court', async () => {
+    const { service, courts } = build();
+    (courts.findById as jest.Mock).mockResolvedValue(courtRow());
+    (courts.deleteBlockScoped as jest.Mock).mockResolvedValue(1);
+    await service.deleteBlock(OWNER, COURT_1, uid('bb'));
+    expect(courts.deleteBlockScoped).toHaveBeenCalledWith(uid('bb'), COURT_1);
+  });
+
+  it('rejects (404) deleting a block that does not belong to the given court — cross-court/branch IDOR', async () => {
+    const { service, courts } = build();
+    // Branch Admin legitimately owns COURT_1 (in their own branch) — scope on
+    // courtId passes — but the blockId supplied belongs to some OTHER
+    // court/branch. `deleteBlockScoped`'s compound where clause matches zero
+    // rows, and the service must fail closed rather than assume success.
+    (courts.findById as jest.Mock).mockResolvedValue(courtRow({ branchId: BRANCH_A }));
+    (courts.deleteBlockScoped as jest.Mock).mockResolvedValue(0);
+    await expect(service.deleteBlock(BRANCH_ADMIN, COURT_1, uid('bb'))).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    expect(courts.deleteBlockScoped).toHaveBeenCalledWith(uid('bb'), COURT_1);
+  });
+
+  it('still 403s before ever reaching the block delete when the courtId itself is out of scope', async () => {
+    const { service, courts } = build();
+    (courts.findById as jest.Mock).mockResolvedValue(courtRow({ branchId: BRANCH_OTHER }));
+    await expect(service.deleteBlock(BRANCH_ADMIN, COURT_1, uid('bb'))).rejects.toMatchObject({
+      code: 'BRANCH_SCOPE_DENIED',
+    });
+    expect(courts.deleteBlockScoped).not.toHaveBeenCalled();
+  });
+});
+
+describe('AdminCatalogService — branch listing scope (ADR-0005, view_all_branches)', () => {
+  it('a Branch Admin only ever sees their own branch in the list (never tenant-wide)', async () => {
+    const { service, branches } = build();
+    await service.listBranches(BRANCH_ADMIN);
+    expect(branches.listAdmin).toHaveBeenCalledWith({ branchId: BRANCH_A });
+  });
+
+  it('Owner/Admin see every branch tenant-wide', async () => {
+    const { service, branches } = build();
+    await service.listBranches(OWNER);
+    expect(branches.listAdmin).toHaveBeenCalledWith({ branchId: undefined });
+  });
+
+  it('403s a Branch Admin reading another branch by id (full record incl. promptPayId/businessHours)', async () => {
+    const { service, branches } = build();
+    (branches.findById as jest.Mock).mockResolvedValue(branchRow({ id: BRANCH_OTHER }));
+    await expect(service.getBranch(BRANCH_ADMIN, BRANCH_OTHER)).rejects.toMatchObject({ code: 'BRANCH_SCOPE_DENIED' });
+  });
+
+  it('lets a Branch Admin read their own branch by id', async () => {
+    const { service, branches } = build();
+    (branches.findById as jest.Mock).mockResolvedValue(branchRow({ id: BRANCH_A }));
+    await expect(service.getBranch(BRANCH_ADMIN, BRANCH_A)).resolves.toMatchObject({ id: BRANCH_A });
   });
 });

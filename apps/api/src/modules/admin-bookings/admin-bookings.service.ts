@@ -164,21 +164,29 @@ export class AdminBookingsService {
       await this.bookings.transitionStatus(bookingId, 'CANCELLED', {
         cancellationDecisionReason: body.reason ?? null,
       });
+      await this.audit.record({
+        actorType: 'ADMIN',
+        actorId: admin.id,
+        action: 'CANCELLATION_APPROVED',
+        entityType: 'Booking',
+        entityId: bookingId,
+        metadata: body.reason ? { reason: body.reason } : undefined,
+      });
     } else {
-      // Decline restores the booking to CONFIRMED; slots were never released.
-      await this.bookings.transitionStatus(bookingId, 'CONFIRMED', {
-        cancellationDecisionReason: body.reason ?? null,
+      // Decline restores the booking to CONFIRMED. This is NOT a new
+      // confirmation — `declineCancellationRequest` is a dedicated,
+      // status-guarded repository method (CANCELLATION_REQUESTED ->
+      // CONFIRMED only) that writes the audit row in the same transaction;
+      // it is the only path other than `advanceOutOfVerification`/
+      // `confirmPayment` allowed to set booking.status = CONFIRMED (see
+      // `bookings.repository.ts` docstrings).
+      await this.bookings.declineCancellationRequest({
+        bookingId,
+        adminId: admin.id,
+        reason: body.reason ?? null,
       });
     }
 
-    await this.audit.record({
-      actorType: 'ADMIN',
-      actorId: admin.id,
-      action: body.decision === 'APPROVE' ? 'CANCELLATION_APPROVED' : 'CANCELLATION_DECLINED',
-      entityType: 'Booking',
-      entityId: bookingId,
-      metadata: body.reason ? { reason: body.reason } : undefined,
-    });
     return this.reloadDetail(admin, bookingId);
   }
 

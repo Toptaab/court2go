@@ -49,13 +49,22 @@ export class AdminCatalogService {
 
   /* ------------------------------------------------------------------ Branches */
 
-  async listBranches(): Promise<BranchDto[]> {
-    return (await this.branches.listAdmin()).map(toAdminBranch);
+  /** `view_all_branches` is BRANCH_ADMIN: false (roles-matrix, ADR-0005) — a
+   * Branch Admin must only ever see their own branch's row (which also
+   * carries `promptPayId`/`businessHours`/`paymentMethod`), never the whole
+   * tenant's branch list. Owner/Admin remain tenant-wide. */
+  async listBranches(admin: AdminUser): Promise<BranchDto[]> {
+    const branchId = admin.role === 'BRANCH_ADMIN' ? (admin.branchId ?? '__no_branch__') : undefined;
+    return (await this.branches.listAdmin({ branchId })).map(toAdminBranch);
   }
 
-  async getBranch(id: string): Promise<BranchDto> {
+  async getBranch(admin: AdminUser, id: string): Promise<BranchDto> {
     const branch = await this.branches.findById(id);
     if (!branch) throw ApiError.notFound('Branch not found');
+    // A Branch's own `id` IS the `branchId` other resources point at, so
+    // scope against the loaded branch's id itself (403 BRANCH_SCOPE_DENIED
+    // for a Branch Admin reading another branch's full record).
+    assertBranchScope(admin, branch.id);
     return toAdminBranch(branch);
   }
 
@@ -231,7 +240,14 @@ export class AdminCatalogService {
 
   async deleteBlock(admin: AdminUser, courtId: string, blockId: string): Promise<void> {
     await this.loadScopedCourt(admin, courtId);
-    await this.courts.deleteBlock(blockId);
+    // Branch scope was only checked against `courtId` above — the block
+    // itself must also be verified as belonging to THAT court before it's
+    // deleted, otherwise a caller could pass a courtId they own alongside a
+    // blockId from a different branch's court (IDOR). Fail closed to 404
+    // rather than assume the deleteMany's affected-row count of 0 means
+    // anything other than "not found in scope".
+    const deleted = await this.courts.deleteBlockScoped(blockId, courtId);
+    if (deleted === 0) throw ApiError.notFound('Block not found');
     await this.record(admin, 'COURT_BLOCK_DELETED', 'CourtBlock', blockId);
   }
 

@@ -152,7 +152,16 @@ export class CourtsRepository {
     );
   }
 
-  deleteBlock(id: string): Promise<CourtBlock> {
-    return this.prisma.withTenant((tx) => tx.courtBlock.delete({ where: { id } }));
+  /**
+   * Scoped block delete (fixes an IDOR: a delete keyed on `blockId` alone
+   * would let a Branch Admin who legitimately owns `courtId` delete a block
+   * belonging to a DIFFERENT court/branch by supplying someone else's
+   * `blockId`). Deletes only a block matching BOTH `id` AND `courtId` in one
+   * statement; returns the affected-row count so the caller can fail closed
+   * (404) rather than assume success.
+   */
+  async deleteBlockScoped(id: string, courtId: string): Promise<number> {
+    const result = await this.prisma.withTenant((tx) => tx.courtBlock.deleteMany({ where: { id, courtId } }));
+    return result.count;
   }
 }

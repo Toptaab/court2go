@@ -12,6 +12,8 @@ import { PrismaService, TenantPrisma } from '../../prisma/prisma.service';
 import { getTenantId } from '../../prisma/tenant-context';
 import { isUniqueConstraintViolation } from '../../prisma/prisma-errors';
 import { SlotUnavailableError, PromotionCapReachedError } from './errors';
+import { ApiError } from '../../common/api-error';
+import { AuditLogRepository } from '../audit/audit-log.repository';
 
 /** Filters shared by the admin booking list + its paired count (M9, PRD A2.1). */
 export interface AdminBookingFilters {
@@ -81,7 +83,10 @@ const RELEASING_STATUSES: BookingStatus[] = ['EXPIRED', 'REJECTED', 'CANCELLED']
 
 @Injectable()
 export class BookingsRepository {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly audit: AuditLogRepository,
+  ) {}
 
   /**
    * THE safety-critical write (ADR-0003). One DB transaction:
@@ -214,11 +219,19 @@ export class BookingsRepository {
   }
 
   /**
-   * Generic status transition (verification success, admin confirm/reject,
-   * cancel, approve/decline cancellation request, mark completed/no-show).
-   * Automatically releases active `booking_slot` rows when transitioning
-   * into a status in `RELEASING_STATUSES` (ARCHITECTURE §5.2 table) — the
-   * caller does not need to remember to do this separately.
+   * Generic status transition (verification success, admin cancel, approve a
+   * cancellation request, mark completed/no-show). Automatically releases
+   * active `booking_slot` rows when transitioning into a status in
+   * `RELEASING_STATUSES` (ARCHITECTURE §5.2 table) — the caller does not need
+   * to remember to do this separately.
+   *
+   * NEVER call this with `newStatus: 'CONFIRMED'` — it is a plain,
+   * unguarded `booking.update` (no `WHERE status = ...`), so a concurrent
+   * caller could silently clobber another transition instead of surfacing a
+   * 409. The only writers allowed to set `CONFIRMED` are
+   * `advanceOutOfVerification`, `confirmPayment`, and
+   * `declineCancellationRequest` (a guarded RESTORE, not a new confirmation)
+   * — all three use a status-guarded `updateMany`.
    */
   async transitionStatus(
     bookingId: string,
@@ -246,8 +259,13 @@ export class BookingsRepository {
    * alongside that transition, and (only for the CONFIRMED/Pay-Onsite branch)
    * the Promotion redemption — all inside ONE `withTenant` transaction so
    * booking↔payment↔redemption never diverge (M6 build note: there is no DB
-   * convergence trigger for the Confirmed rule — this is the sole code path
-   * allowed to set `booking.status = CONFIRMED`, mirroring ARCHITECTURE §6.2).
+   * convergence trigger for the Confirmed rule — this, together with
+   * `confirmPayment`, is the sole code path allowed to set
+   * `booking.status = CONFIRMED` as a NEW confirmation, mirroring
+   * ARCHITECTURE §6.2. `declineCancellationRequest` also writes `CONFIRMED`,
+   * but only as a guarded RESTORE of a booking that was already CONFIRMED
+   * before a member's cancellation request — never as a first-time
+   * confirmation — so it does not violate this invariant).
    */
   async advanceOutOfVerification(args: {
     bookingId: string;
@@ -389,10 +407,12 @@ export class BookingsRepository {
   /**
    * Admin payment confirm (PRD A2.3 AC2 / A2.2 AC3, ARCHITECTURE §6) — the
    * SOLE additional code path (alongside `advanceOutOfVerification`'s
-   * Pay-Onsite branch) allowed to set `booking.status = CONFIRMED`. Covers
-   * BOTH: slip review (PENDING_PAYMENT_CONFIRMATION → CONFIRMED) and a
-   * direct/walk-in confirm with no slip (PENDING_PAYMENT → CONFIRMED,
-   * ARCHITECTURE §6.1 diagram). One `withTenant` transaction:
+   * Pay-Onsite branch) allowed to set `booking.status = CONFIRMED` as a NEW
+   * confirmation (see `declineCancellationRequest` for the separate guarded
+   * RESTORE path, which is not a new confirmation). Covers BOTH: slip review
+   * (PENDING_PAYMENT_CONFIRMATION → CONFIRMED) and a direct/walk-in confirm
+   * with no slip (PENDING_PAYMENT → CONFIRMED, ARCHITECTURE §6.1 diagram).
+   * One `withTenant` transaction:
    *   1. status-guarded Booking update (no-op / converged-state return if
    *      the booking is no longer in a confirmable status — mirrors
    *      `advanceOutOfVerification`'s race handling);
@@ -490,6 +510,55 @@ export class BookingsRepository {
       });
 
       return { booking, payment };
+    });
+  }
+
+  /**
+   * Admin DECLINE of a cancellation request (PRD A2.1, ARCHITECTURE §6) —
+   * restores a `CANCELLATION_REQUESTED` booking back to `CONFIRMED`. This is
+   * NOT a new confirmation: it is a guarded RESTORE of a booking that was
+   * already `CONFIRMED` before the member's cancellation request moved it to
+   * `CANCELLATION_REQUESTED` (slots were never released for that status — it
+   * is not in `RELEASING_STATUSES`, so there is nothing to re-reserve).
+   *
+   * Status-guarded via the same conditional `updateMany` pattern as
+   * `confirmPayment`/`rejectPayment`, but — unlike those money-path
+   * guards — a losing race here throws `INVALID_STATE_TRANSITION` (409)
+   * rather than returning a silently "converged" state: two admins racing
+   * APPROVE vs DECLINE on the same cancellation request disagree on the
+   * outcome, so there is no safe state to converge to, and the loser must
+   * see the conflict. Zero affected rows means the booking is no longer
+   * `CANCELLATION_REQUESTED` (already approved/declined concurrently, or
+   * moved on some other path) — always a hard error, never a plain
+   * `booking.update`/`transitionStatus` call, so a race can never silently
+   * clobber another admin's decision. The audit row is written in the SAME
+   * transaction via `AuditLogRepository.recordWithTx`, so booking↔audit
+   * never diverge.
+   */
+  async declineCancellationRequest(args: {
+    bookingId: string;
+    adminId: string;
+    reason?: string | null;
+  }): Promise<Booking> {
+    return this.prisma.withTenant(async (tx) => {
+      const restored = await tx.booking.updateMany({
+        where: { id: args.bookingId, status: 'CANCELLATION_REQUESTED' },
+        data: { status: 'CONFIRMED', cancellationDecisionReason: args.reason ?? null },
+      });
+      if (restored.count === 0) {
+        throw ApiError.conflict('INVALID_STATE_TRANSITION', 'No pending cancellation request on this booking');
+      }
+
+      await this.audit.recordWithTx(tx, {
+        actorType: 'ADMIN',
+        actorId: args.adminId,
+        action: 'CANCELLATION_DECLINED',
+        entityType: 'Booking',
+        entityId: args.bookingId,
+        metadata: args.reason ? { reason: args.reason } : undefined,
+      });
+
+      return tx.booking.findUniqueOrThrow({ where: { id: args.bookingId } });
     });
   }
 
