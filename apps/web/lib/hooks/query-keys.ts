@@ -33,4 +33,9 @@ export const queryKeys = {
   // --- Member bookings (M10.5) ---
   bookingDetail: (bookingId: string) => ['member', 'bookings', bookingId] as const,
   myBookings: (scope?: string, page?: number) => ['member', 'bookings', 'list', { scope, page }] as const,
+
+  // --- Admin (M10.7) ---
+  adminBookings: (params: Record<string, unknown>) => ['admin', 'bookings', 'list', params] as const,
+  adminCalendar: (branchId: string, date: string) => ['admin', 'bookings', 'calendar', branchId, date] as const,
+  adminBookingDetail: (bookingId: string) => ['admin', 'bookings', bookingId] as const,
 };
