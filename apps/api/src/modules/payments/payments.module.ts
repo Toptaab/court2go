@@ -40,5 +40,8 @@ import { PaymentController } from './payment.controller';
     ClientSessionsRepository,
     MemberSessionGuard,
   ],
+  // Exported so M9's admin booking controllers wire the already-tested admin
+  // payment confirm/reject/slip-url methods behind the RBAC guards.
+  exports: [PaymentService],
 })
 export class PaymentsModule {}

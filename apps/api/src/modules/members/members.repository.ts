@@ -77,15 +77,48 @@ export class MembersRepository {
   async listAdmin(opts: { q?: string; branchId?: string | null; skip: number; take: number }) {
     return this.prisma.withTenant((tx) =>
       tx.member.findMany({
-        where: {
-          ...(opts.q ? { OR: [{ phone: { contains: opts.q } }, { name: { contains: opts.q, mode: 'insensitive' } }] } : {}),
-          // Branch Admin scoping (PRD A7.1 AC1): only Members with >=1 booking at their Branch.
-          ...(opts.branchId ? { bookings: { some: { branchId: opts.branchId } } } : {}),
-        },
+        where: this.adminWhere(opts),
         orderBy: { createdAt: 'desc' },
         skip: opts.skip,
         take: opts.take,
       }),
     );
+  }
+
+  /** Paired count for `listAdmin`'s pagination envelope. */
+  async countAdmin(opts: { q?: string; branchId?: string | null }): Promise<number> {
+    return this.prisma.withTenant((tx) => tx.member.count({ where: this.adminWhere(opts) }));
+  }
+
+  private adminWhere(opts: { q?: string; branchId?: string | null }) {
+    return {
+      ...(opts.q
+        ? { OR: [{ phone: { contains: opts.q } }, { name: { contains: opts.q, mode: 'insensitive' as const } }] }
+        : {}),
+      // Branch Admin scoping (PRD A7.1 AC1): only Members with >=1 booking at their Branch.
+      ...(opts.branchId ? { bookings: { some: { branchId: opts.branchId } } } : {}),
+    };
+  }
+
+  /**
+   * Per-member booking aggregates for the admin Member views (PRD A7 —
+   * `bookingCount`/`lastBookingAt`). One `groupBy` for a page of members;
+   * `branchId` scopes the aggregate to a Branch Admin's own branch so the
+   * numbers match what they can actually see.
+   */
+  async bookingStats(
+    memberIds: string[],
+    branchId?: string | null,
+  ): Promise<Map<string, { count: number; lastBookingAt: Date | null }>> {
+    if (memberIds.length === 0) return new Map();
+    const rows = await this.prisma.withTenant((tx) =>
+      tx.booking.groupBy({
+        by: ['memberId'],
+        where: { memberId: { in: memberIds }, ...(branchId ? { branchId } : {}) },
+        _count: { _all: true },
+        _max: { startsAt: true },
+      }),
+    );
+    return new Map(rows.map((r) => [r.memberId, { count: r._count._all, lastBookingAt: r._max.startsAt }]));
   }
 }

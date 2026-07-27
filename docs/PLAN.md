@@ -56,14 +56,98 @@ Pay-Onsite auto-confirm; QR: dynamic PromptPay EMVCo payload, slip upload-url + 
 
 **Carryovers → M8/M9:** (1) admin HTTP endpoints `POST /admin/bookings/{id}/payment/{confirm,reject}` + `GET .../slip-url` are NOT wired — the service methods + authoritative transactions exist and are unit-tested, but the controllers must land behind M8's `AdminSessionGuard` + `RolesGuard` (Owner/Admin/Branch-Admin) with branch-scope enforcement; a `// TODO(M8/M9)` marks the spot in `payment.service.ts`. (2) 🟢 nit deferred: pin one externally-published PromptPay end-to-end QR vector (current spec relies on the CRC catalogue check + structural/round-trip invariants + hand-derived vectors, which the build agent flagged). (3) `LocalObjectStorageAdapter` is an MVP stub — real S3/R2 `S3Adapter` binding is an M11 deploy concern (the `contentLength` cap + private tenant-prefixed keys are already enforced in `PaymentService`).
 
-## M8 — Admin auth + RBAC ⬜
+## M8 — Admin auth + RBAC ✅
 `admin/auth/login|logout`, `admin/me`, role guards (Owner/Admin/Branch Admin), branch-scope enforcement.
 
-## M9 — Admin bookings + catalog + promotions + news + config/branding ⬜
-Full admin surface per openapi `/admin/**`.
+**Shipped** in `apps/api` as `AuthAdminModule`: `admin/auth/login|logout` (`@HttpCode(200)`, DB-backed `AdminSession` → `httpOnly` admin session cookie) + `admin/me`, and the reusable RBAC primitives every `/admin/**` route consumes — `AdminSessionGuard` (fails closed on missing/invalid session and on `!isActive`), `@Roles()`/`RolesGuard`, `@CurrentAdmin()`, `assertBranchScope(adminUser, resourceBranchId)` → 403 `BRANCH_SCOPE_DENIED` (Owner/Admin tenant-wide, Branch-Admin scoped), plus `@BranchScoped()`/`BranchScopeGuard`. Admin passwords hashed via a dedicated util (unit-tested). All reads/writes ride `withTenant()`/RLS. Reviewer clean (findings shared with M9 below). Tests: guard/roles/branch-scope/password/service specs, green as part of the api suite.
+
+Deferred (🟢 nit, non-gating): `BranchScopeGuard`/`@BranchScoped()` are implemented + exported but not wired onto any route — every admin service hand-rolls its own `assertBranchScope` against the loaded resource instead. Either adopt the decorator or drop the abstraction in M11.
+
+## M9 — Admin bookings + catalog + promotions + news + config/branding ✅
+Full admin surface per openapi `/admin/**`. **No data/contract work** — every repository is prisma-data pre-built (`listForAdmin`, `listForCalendar`, `listAdmin`, `softDelete`, `setActive`, `hasFutureBookings`, `createBlock`/`deleteBlock`, `promotions.usageForPromotion`/`redeem`, `admin-users` CRUD, `members.listAdmin` with branch-scoping, `config.get/update`, `tenants.updateBranding`) and every DTO already lives in `packages/types` (`dto/admin-booking.ts`, `dto/admin-catalog.ts`, `dto/admin-misc.ts`). Bind to them; no api-designer / prisma-data.
+
+**Reuse (do NOT rebuild):** M8 RBAC — `AdminSessionGuard`, `@Roles()`/`RolesGuard`, `@CurrentAdmin()`, `assertBranchScope(adminUser, resourceBranchId)`, `@BranchScoped()`/`BranchScopeGuard` (all exported from `AuthAdminModule`). M7 payment — `PaymentService.adminConfirmPayment/adminRejectPayment/issueSlipViewUrl` (authoritative txns already unit-tested; consume the `// TODO(M8/M9)` marker). M6 booking repo — `modifySlots`, `transitionStatus`, `createHold`, `redeemPromotionWithTx`. Booking mapper — `mapToBookingDetail`/`mapToBookingListItem`; extend `computeAllowedActions` to add the ADMIN_* actions (mapper note explicitly defers them here — enum already in contract, no contract change).
+
+**Guard discipline:** every `/admin/**` route behind `AdminSessionGuard` + `RolesGuard`. Branch-scoped routes (bookings, courts, blocks, member views, payment actions) enforce `assertBranchScope` against the resource's `branchId` (Owner/Admin tenant-wide; Branch-Admin scoped) — 403 `BRANCH_SCOPE_DENIED` per contract (GET /admin/bookings/{id} documents 403). Admin-user CRUD role rules per ADR-0005 (`AdminUsersService.remove` refuses OWNER always, ADMIN unless actor is OWNER; only OWNER/ADMIN create). Audit row on every state change.
+
+**Build slices (one coherent backend pass, module-local repos already exist):**
+1. **Admin bookings** — `AdminBookingsModule`: list (filterable, branch-scoped) · calendar · detail · walk-in POST · modify PATCH · cancel · outcome (COMPLETED/NO_SHOW) · cancellation-decision (APPROVE releases slots — M6 carryover) · wire the 3 payment controllers (confirm/reject/slip-url) onto the existing `PaymentService` admin methods behind the guards + branch-scope. Extend `computeAllowedActions` for ADMIN_* actions.
+2. **Admin catalog** — `AdminCatalogModule`: branches (list/get/create/patch/delete+deactivate) · sports · courts (branch-scoped, +blocks list/create/delete) — bind to catalog repos + `catalog` admin mappers.
+3. **Admin promotions** — list/create/patch/delete/deactivate + usage (paginated).
+4. **Admin news** — paginated list/create/patch/delete.
+5. **Admin members** — list (q, branch-scoped)/detail/bookings/block.
+6. **Admin config/branding/uploads** — `GET/PUT /admin/config` (Config row), `GET/PUT /admin/branding` (Tenant record via `updateBranding`), `POST /admin/uploads/image-url` (public-read presigned PUT; publicUrl derived deterministically from the public key — real S3 binding is M11).
+7. **Admin users / roles** — `/admin/admin-users` CRUD (ADR-0005 role rules) + `/admin/roles-matrix` (static capability map).
+
+**Exit:** typecheck clean across workspaces, `apps/api` jest green, reviewer no blockers.
+
+**Shipped:** the full `/admin/**` surface as seven modules, each controller behind `@UseGuards(AdminSessionGuard, RolesGuard)`, bound to the pre-built repos + `@repo/types` admin DTOs (no api-designer/prisma-data). (1) `AdminBookingsModule` — list/calendar/detail (branch-scoped), walk-in POST + modify PATCH (both re-derive price via `planBookingSelection`→`computePriceBreakdown` and route slot writes through `createHold`/`modifySlots` so the `uniq_active_court_slot` guard + `SlotUnavailableError`→409 stand; client price never trusted), cancel/outcome/cancellation-decision, and the 3 payment controllers wired onto M7's `PaymentService.adminConfirmPayment/adminRejectPayment/issueSlipViewUrl` (the `// TODO(M8/M9)` carryover — now discharged); `computeAllowedActions` extended for ADMIN_* actions. (2) `AdminCatalogModule` — branches/sports/courts + blocks. (3) promotions (+usage), (4) news, (5) members (branch-scoped q + block), (6) config/branding/uploads, (7) admin-users CRUD (ADR-0005: `remove` refuses OWNER always, Admin-deactivation Owner-only, OWNER excluded from the settable-role enum at the zod layer) + static roles-matrix. Audit row on every status change; every read/write through `withTenant()`/RLS.
+
+**Reviewer:** clean after one fix cycle. Two blockers + one should-fix found and fixed in `5fe935b`: (a) `cancellationDecision` DECLINE reached CONFIRMED via the unguarded generic `transitionStatus` — a third parallel CONFIRMED writer, violating the non-negotiable invariant; replaced with a dedicated status-guarded `BookingsRepository.declineCancellationRequest` (restores CANCELLATION_REQUESTED→CONFIRMED, 0-row→409, audit in the same tx — the two sole *confirmation* writers `advanceOutOfVerification`/`confirmPayment` are untouched); (b) `deleteBlock` IDOR — scope checked on `courtId` but delete keyed on `blockId` alone; replaced with `deleteBlockScoped(id, courtId)` (404 fail-closed); (c) `GET /admin/branches` leaked every branch's record (incl. `promptPayId`) to Branch-Admin — now scoped. Re-review verdict: no blockers, no regressions. Verified clean on guard coverage, ADR-0005 rules, price re-derivation, double-book guard, audit rows, RLS, and contract discipline. Tests: apps/api 233 (18 suites, was 224), packages/domain 70; typecheck clean across all workspaces.
+
+**Carryovers → M11:** the unused `BranchScopeGuard`/`@BranchScoped()` decision (adopt or drop). Plus the standing M7 nits (pin an externally-published end-to-end PromptPay QR vector; real S3/R2 `ObjectStorage` binding).
 
 ## M10 — apps/web (Next.js) ⬜
-App Router, TanStack Query, Tailwind + shadcn, bound to Claude Design pages + `@repo/types`. Client booking flow + admin console.
+App Router, TanStack Query, Tailwind, bound to Claude Design pages + `@repo/types`. Client booking flow + admin console. `apps/web` does NOT exist yet — M10.1 creates it. All screens map to `docs/DESIGN.md` (client M-series, admin D-series). No contract/data work: every screen binds an existing `@repo/types` schema + an existing API path (see `docs/openapi.yaml`); if a screen seems to need a new endpoint or DTO, STOP and route to api-designer — do not invent one in the web app.
+
+### M10 dispatch policy (NOTE — future runs MUST follow this)
+- **Model split:** build/executor agents (`nextjs-frontend`, `nestjs-backend`, `caveman:cavecrew-builder`) run on the LOWER model — spawn them with `model: "sonnet"`. Reserve the higher model (opus) for design-heavy planning and the `reviewer` pass.
+- **Sequential under lead:** dispatch slices ONE AT A TIME in the order below, not parallel blind runs — this holds cross-slice consistency (shared client, tokens, hook patterns). The `reviewer` runs per slice; a slice is done only when its exit check passes AND reviewer is clean. Later slices build on merged earlier ones.
+- **Name files + reuse targets in every prompt:** each build-agent prompt must pass the slice's exact files/dirs + REUSE targets (below) so the agent binds existing schemas/patterns instead of re-exploring the repo. Every slice after M10.1 says "follow M10.1 conventions."
+
+### M10 slices (ordered, each ≈ one build-agent run)
+
+**M10.1 — Scaffold + app shell + shared conventions** (foundation; establishes the rules every later slice follows).
+- Creates: `apps/web/` — `package.json`, `next.config.mjs`, `tsconfig.json` (path-bind `@repo/types`), `tailwind.config.ts` + `app/globals.css` (Claude Design tokens: `--accent` tenant var, semantic status colors ok/warn/danger/info/pay-onsite/LINE, system-ui + Noto Sans Thai stack, `:root[data-theme]` dark mode), root `app/layout.tsx`, route groups `app/(public)/`, `app/(member)/`, `app/(admin)/` with group layouts, `components/ui/` primitives, `lib/error.ts` (error-envelope → UI message mapping), `lib/format.ts` (THB + ICT date/time helpers), bilingual copy convention (Thai strings verbatim from design).
+- Reuse: `@repo/types` error-envelope schema; the Claude Design tokens/`docs/DESIGN.md` (do NOT invent a new palette — extract tokens). This slice DEFINES the conventions; there is nothing earlier to reuse.
+- Exit: `apps/web` typechecks + `next build` clean; root + group layouts render with tokens applied; error-envelope helper unit-covered.
+
+**M10.2 — Shared data layer + query client + session/auth plumbing.**
+- Creates: `lib/api-client.ts` (fetch wrapper: `X-Tenant-Id` header, `credentials: 'include'` for `c2g_member_session`/`c2g_admin_session` cookies, throws parsed error envelope), `lib/query.ts` (TanStack `QueryClient` + provider mounted in layouts), `lib/hooks/` typed query/mutation factories that zod-parse responses, `lib/auth/` member + admin session context/hooks (`useMe`, `useAdminMe`) + redirect guards.
+- Reuse: `@repo/types` ALL response schemas (parse with the exported zod schemas — never hand-type); `Me`/`meSchema`, `AdminMe`/`adminMeSchema`; M10.1 `lib/error.ts` + conventions.
+- Exit: query client wired; `useMe`/`useAdminMe` resolve against a running API; a sample typed hook round-trips one PUBLIC endpoint with zod parse; typecheck clean.
+
+**M10.3 — Public catalog + availability** (client browse; PUBLIC endpoints, no session).
+- Creates: `app/(public)/` — news feed (M1), branch list (M3), sport list (M4), court detail with date picker + availability grid + slot-count selector + price preview (M5), news detail.
+- Reuse: `PublicTenant`/`PublicBranch`/`PublicSport`/`PublicCourt`/`PublicNews`, `AvailabilityResponse`/`AvailabilityQuery`/`AvailabilityStart`, `PriceBreakdown`; M10.2 hooks + api-client; M10.1 layout/tokens/format. Endpoints: `GET /tenants/by-slug/{slug}`, `/news`, `/branches`, `.../sports`, `.../courts`, `/courts/{id}`, `/courts/{id}/availability`.
+- Exit: full catalog chain renders from the live API; availability grid shows free/taken + per-slot-count price; unknown/inactive court → clean not-found.
+
+**M10.4 — Member auth (OTP + LINE) + profile** (member session mint).
+- Creates: `app/(member)/` login screens — LINE + phone OTP (M7a), booking-gate login SMS-OTP (M7b), OTP entry + error handling (M8), profile view (M19) + edit (M17).
+- Reuse: `OtpRequestBody`/`OtpRequestResponse`/`OtpVerifyBody`, `MemberSessionResponse`, `LineLoginUrlResponse`/`LineCallbackBody`/`LineOaLinkUrlResponse`, `Me`/`UpdateProfileBody`; M10.2 member auth hooks. Endpoints: member auth group + `GET/PATCH /me`.
+- Exit: OTP + LINE login mint a member session and redirect; profile edit persists; phone shown immutable (bind path only) per invariant.
+
+**M10.5 — Booking create + hold + review/promo + my bookings + detail + cancellation.**
+- Creates: `app/(member)/` booking flow — review + promo + price (M6), hold creation off the M10.3 selection, My Bookings list (M14), booking detail (M15), booking cancellation request (M16), recovery/empty states (M18).
+- Reuse: `CreateHoldBody`/`CreateHoldResponse`, `ApplyPromoBody`/`AppliedPromotion`, `BookingDetail`/`BookingListItem`/`MyBookingsQuery`, `CancellationRequestBody`, `PriceBreakdown`; M10.3 grid selection, M10.4 session. Endpoints: `POST /courts/{id}/holds`, `GET /bookings/{id}`, `POST|DELETE /bookings/{id}/promotion`, `POST /bookings/{id}/cancellation-request`, `GET /me/bookings`. NOTE: price is display-only from the server response — never compute price client-side.
+- Exit: book→hold→review→(promo apply/remove)→my-bookings→detail→cancellation-request drives end-to-end against the API; server-derived price shown verbatim.
+
+**M10.6 — Payment: PromptPay QR + slip upload + confirmation states.**
+- Creates: `app/(member)/` payment — PromptPay QR + slip upload (M10-design), pending confirmation (M11-design), confirmed QR branch (M12-design), confirmed Pay-Onsite branch (M13-design).
+- Reuse: `Payment`/`PromptPayQr`, `SlipUploadUrlBody`/`SlipUploadUrlResponse`, `ConfirmSlipBody`; M10.5 booking detail, M10.2 client. Endpoints: `GET /bookings/{id}/payment`, `POST .../payment/slip-upload-url`, `POST .../payment/slip`. Presigned-PUT upload then confirm-slip (mirror server key discipline — client uploads to the issued URL only).
+- Exit: QR branch renders payload + accepts slip upload → pending-confirmation; Pay-Onsite branch shows confirmed-not-collected; both states read from the live payment endpoint.
+
+**M10.7 — Admin console shell + admin auth + calendar + booking read.**
+- Creates: `app/(admin)/` — admin login, admin layout + role-aware nav (visibility driven by `RolesMatrix`/role; Branch-Admin sees scoped nav), calendar courts × grid (D1), booking list + filters (D2), booking detail.
+- Reuse: `AdminLoginBody`/`AdminSessionResponse`/`AdminMe`/`RolesMatrix`, `AdminBookingListQuery`/`AdminCalendarQuery`, `BookingDetail`/`BookingListItem`; M10.2 admin auth hooks, M10.1 conventions. Endpoints: admin auth/me/roles-matrix, `GET /admin/bookings`, `/admin/bookings/calendar`, `/admin/bookings/{id}`. Client must honor branch-scope in the UI, but the server 403 `BRANCH_SCOPE_DENIED` is the real guard — surface it cleanly.
+- Exit: admin login + role-scoped nav; calendar + filterable list + detail render against the live admin API.
+
+**M10.8 — Admin booking actions + slip-review queue + cancellation queue + walk-in.**
+- Creates: `app/(admin)/` — walk-in create (D6), slip review queue (D4) with slip-url viewer, cancellation queue (D5), booking action controls (confirm/reject payment, cancel, outcome COMPLETED/NO_SHOW, cancellation APPROVE/DECLINE).
+- Reuse: `AdminCreateBookingBody`/`AdminModifyBookingBody`/`AdminCancelBookingBody`/`AdminSetBookingOutcomeBody`, `AdminConfirmPaymentBody`/`AdminRejectPaymentBody`/`SlipViewUrlResponse`, `AdminCancellationDecisionBody`; M10.7 shell + booking detail. Endpoints: `POST /admin/bookings`, `PATCH /admin/bookings/{id}`, `.../cancel`, `.../outcome`, `.../payment/{confirm,reject}`, `GET .../payment/slip-url`, `.../cancellation-decision`. Walk-in shows server-derived price only (no client pricing).
+- Exit: full admin booking lifecycle (walk-in, modify, slip confirm/reject, cancel, outcome, cancellation decision) drives against the API; queues refresh on action.
+
+**M10.9 — Admin catalog CRUD** (branches, sports, courts + blocks).
+- Creates: `app/(admin)/` — branch editor incl. payment method / PromptPay config (D9), sport manager, court editor: schedule / 30-min grid interval / max slots / peak pricing (D7), court blocks list/create/delete.
+- Reuse: `UpsertBranchBody`/`BusinessHoursDay`, `UpsertSportBody`, `UpsertCourtBody`/`CourtScheduleDay`/`PeakTimeRangeInput`, `CreateCourtBlockBody`/`CourtBlock`, `LifecycleResult`; M10.7 shell. Endpoints: admin branches/sports/courts + `.../blocks` (list/create/deactivate/delete). Court schedule inputs must respect the :00/:30 lattice the schema enforces — surface the server validation error, don't silently coerce.
+- Exit: catalog create/patch/deactivate/delete flows work end-to-end; court editor round-trips schedule + pricing; block create/delete work.
+
+**M10.10 — Admin misc CRUD** (promotions, news, members, config, branding, admin-users, roles view).
+- Creates: `app/(admin)/` — promotions manager + usage (D11), news editor (D13), members manager + block + booking history (D12), config panel (D14), branding + logo upload (D15), admin-users CRUD (ADR-0005 role rules reflected in UI affordances), roles matrix view (D16).
+- Reuse: `UpsertPromotionBody`/`Promotion`/`PromotionUsageItem`, `UpsertNewsBody`, `AdminMemberListQuery`/`MemberAdminView`/`AdminBlockMemberBody`, `UpdateConfigBody`/`Config`, `UpdateBrandingBody`/`Branding`, `ImageUploadUrlBody`/`ImageUploadUrlResponse`, `CreateAdminUserBody`/`UpdateAdminUserBody`/`AdminUser`/`RolesMatrix`; M10.7 shell. Endpoints: admin promotions/news/members/config/branding/uploads/admin-users/roles-matrix. Admin-user UI must not offer OWNER as a settable role and must hide/deny illegal role actions (server ADR-0005 rules are the real guard).
+- Exit: every admin misc surface performs its CRUD against the live API; image-upload presigned flow works; roles matrix renders; admin-user role affordances respect ADR-0005.
+
+**M10 exit (whole milestone):** all 10 slices merged + reviewer-clean; `apps/web` typechecks + builds; client booking flow and admin console drive end-to-end against `apps/api`. (Playwright e2e + CI pipeline are M11, not M10.)
 
 ## M11 — Hardening ⬜
 Rate limiting, audit log wiring, e2e (Playwright), CI (turbo pipeline), Docker/deploy.

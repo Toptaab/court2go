@@ -41,5 +41,9 @@ import { HoldExpiryJob } from '../../jobs/hold-expiry.job';
     MemberSessionGuard,
     HoldExpiryJob,
   ],
+  // Exported so M9's `AdminBookingsModule` reuses the authoritative walk-in /
+  // modify pipeline (`createWalkIn`/`adminModify`) instead of duplicating the
+  // grid-validation + pricing logic.
+  exports: [BookingService, BookingsRepository, ConfigRepository, AuditLogRepository],
 })
 export class BookingsModule {}

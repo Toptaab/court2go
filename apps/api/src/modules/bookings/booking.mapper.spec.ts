@@ -167,6 +167,75 @@ describe('computeAllowedActions', () => {
   });
 });
 
+describe('computeAllowedActions — ADMIN actor (M9)', () => {
+  const now = new Date('2026-01-01T00:00:00.000Z');
+  const startsAt = new Date('2026-01-05T10:00:00.000Z');
+  const opts = (paymentStatus?: any) => ({ actor: 'ADMIN' as const, paymentStatus });
+
+  it('offers confirm + reject on a slip pending review', () => {
+    const actions = computeAllowedActions(
+      { status: 'PENDING_PAYMENT_CONFIRMATION', startsAt, branchPaymentMethod: 'QR_CODE' },
+      now,
+      2,
+      opts('SLIP_UPLOADED_PENDING_REVIEW'),
+    );
+    expect(actions).toEqual(expect.arrayContaining(['ADMIN_CONFIRM_PAYMENT', 'ADMIN_REJECT_PAYMENT', 'ADMIN_MODIFY', 'ADMIN_CANCEL']));
+  });
+
+  it('offers confirm (no reject) on a PENDING_PAYMENT booking', () => {
+    const actions = computeAllowedActions(
+      { status: 'PENDING_PAYMENT', startsAt, branchPaymentMethod: 'QR_CODE' },
+      now,
+      2,
+      opts('AWAITING_SLIP_UPLOAD'),
+    );
+    expect(actions).toContain('ADMIN_CONFIRM_PAYMENT');
+    expect(actions).not.toContain('ADMIN_REJECT_PAYMENT');
+  });
+
+  it('offers approve/decline on a cancellation request', () => {
+    const actions = computeAllowedActions(
+      { status: 'CANCELLATION_REQUESTED', startsAt, branchPaymentMethod: 'PAY_ONSITE' },
+      now,
+      2,
+      opts(),
+    );
+    expect(actions).toEqual(expect.arrayContaining(['ADMIN_APPROVE_CANCELLATION', 'ADMIN_DECLINE_CANCELLATION']));
+  });
+
+  it('offers mark completed/no-show + cancel/modify on a CONFIRMED booking, never a payment confirm', () => {
+    const actions = computeAllowedActions(
+      { status: 'CONFIRMED', startsAt, branchPaymentMethod: 'PAY_ONSITE' },
+      now,
+      2,
+      opts('PAY_ONSITE_NOT_COLLECTED'),
+    );
+    expect(actions).toEqual(expect.arrayContaining(['ADMIN_MARK_COMPLETED', 'ADMIN_MARK_NO_SHOW', 'ADMIN_MODIFY', 'ADMIN_CANCEL']));
+    expect(actions).not.toContain('ADMIN_CONFIRM_PAYMENT');
+  });
+
+  it('offers no admin actions on a terminal (CANCELLED) booking', () => {
+    const actions = computeAllowedActions(
+      { status: 'CANCELLED', startsAt, branchPaymentMethod: 'QR_CODE' },
+      now,
+      2,
+      opts(),
+    );
+    expect(actions).toEqual([]);
+  });
+
+  it('never emits member actions for the ADMIN actor', () => {
+    const actions = computeAllowedActions(
+      { status: 'CONFIRMED', startsAt, branchPaymentMethod: 'QR_CODE' },
+      now,
+      2,
+      opts(),
+    );
+    expect(actions).not.toContain('REQUEST_CANCELLATION');
+    expect(actions).not.toContain('UPLOAD_SLIP');
+  });
+});
+
 describe('mapToBookingListItem', () => {
   it('derives the provisional paymentStatus/amountDue when no Payment row exists', () => {
     const row = {

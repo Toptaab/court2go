@@ -21,9 +21,17 @@ export class BranchesRepository {
     );
   }
 
-  /** All branches (any status) — Admin Console (PRD A4). */
-  listAdmin(): Promise<Branch[]> {
-    return this.prisma.withTenant((tx) => tx.branch.findMany({ orderBy: { name: 'asc' } }));
+  /** All branches (any status) — Admin Console (PRD A4). `branchId` narrows
+   * to a single branch (a BRANCH_ADMIN's own branch, mirroring
+   * `CourtsRepository.listAdmin`'s scoping) — Owner/Admin pass none and see
+   * every branch tenant-wide. */
+  listAdmin(filters: { branchId?: string } = {}): Promise<Branch[]> {
+    return this.prisma.withTenant((tx) =>
+      tx.branch.findMany({
+        where: filters.branchId ? { id: filters.branchId } : {},
+        orderBy: { name: 'asc' },
+      }),
+    );
   }
 
   create(data: Omit<Prisma.BranchUncheckedCreateInput, 'id' | 'tenantId'>): Promise<Branch> {

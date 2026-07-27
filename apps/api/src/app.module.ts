@@ -13,6 +13,13 @@ import { MembersModule } from './modules/members/members.module';
 import { AvailabilityModule } from './modules/availability/availability.module';
 import { BookingsModule } from './modules/bookings/bookings.module';
 import { PaymentsModule } from './modules/payments/payments.module';
+import { AdminBookingsModule } from './modules/admin-bookings/admin-bookings.module';
+import { AdminCatalogModule } from './modules/admin-catalog/admin-catalog.module';
+import { AdminPromotionsModule } from './modules/admin-promotions/admin-promotions.module';
+import { AdminNewsModule } from './modules/admin-news/admin-news.module';
+import { AdminMembersModule } from './modules/admin-members/admin-members.module';
+import { AdminConfigModule } from './modules/admin-config/admin-config.module';
+import { AdminUsersModule } from './modules/admin-users/admin-users.module';
 
 /**
  * Root module. Feature modules (catalog, availability, auth, bookings,
@@ -34,6 +41,13 @@ import { PaymentsModule } from './modules/payments/payments.module';
     AvailabilityModule,
     BookingsModule,
     PaymentsModule,
+    AdminBookingsModule,
+    AdminCatalogModule,
+    AdminPromotionsModule,
+    AdminNewsModule,
+    AdminMembersModule,
+    AdminConfigModule,
+    AdminUsersModule,
   ],
   controllers: [HealthController],
   providers: [TenantsRepository, TenantContextMiddleware],
