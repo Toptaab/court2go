@@ -1,0 +1,161 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * Claude Design token layer — court2go (docs/DESIGN.md "Design system"
+ * section, extracted verbatim; do NOT invent a palette here).
+ *
+ * Two families:
+ *  1. `--accent` — the ONE tenant white-label variable. Swapping this
+ *     single value re-skins the whole client surface; tints derive from
+ *     it via `color-mix(in oklab, …)` rather than being separately
+ *     hand-picked, so a re-skin never goes out of sync. `--accent-ink`
+ *     flips text to a readable ink tone when it sits on a pale
+ *     accent-tinted background (badges/chips/banners).
+ *  2. `--status-*` — semantic status colors. NEVER re-skinned by tenant
+ *     or theme swap: ok/warn/danger/info/pay-onsite/LINE are fixed hex
+ *     in both light and dark mode, because their meaning ("this booking
+ *     is confirmed", "this is a LINE action") must read the same for
+ *     every tenant and staff member.
+ *
+ * `--bg`/`--surface`/`--surface-2`/`--fg`/`--fg-muted` are NOT separate
+ * brand colors — they're the ink scale + white, laid out as usable
+ * app-shell layers (page background vs. card surface vs. raised surface,
+ * default text vs. secondary text) so components never reach for a raw
+ * ink/line variable directly.
+ *
+ * Dark mode ships BOTH `@media (prefers-color-scheme: dark)` (automatic,
+ * OS-driven) AND `:root[data-theme="dark"]` (explicit override, for a
+ * future user-facing toggle) — same variable set, per DESIGN.md.
+ *
+ * The DESIGN.md "Live tweaker" (primary-color picker + Google-Fonts
+ * dropdown) is an explicitly-flagged demo aid and is NOT shipped here.
+ */
+
+:root {
+  /* --- accent (tenant white-label var) --- */
+  --accent: #0c8c6a;
+  /* RGB channels of --accent, for Tailwind's rgb(var(...) / <alpha-value>)
+     opacity-modifier pattern (Tailwind v3 can't derive alpha from an opaque
+     var() hex). A tenant override swapping --accent MUST also update this
+     value in lockstep — it is not derived automatically. */
+  --accent-rgb: 12 140 106;
+  --accent-ink: #15181b;
+  --accent-tint: color-mix(in oklab, var(--accent), white 88%);
+  --accent-tint-strong: color-mix(in oklab, var(--accent), white 72%);
+
+  /* --- semantic status (fixed, never re-skinned) --- */
+  --status-ok: #1f9d57;
+  --status-warn: #c98a0e;
+  --status-danger: #d24236;
+  --status-info: #2f6feb;
+  --status-pay-onsite: #5b5bd6;
+  --status-line: #06c755;
+
+  /* RGB channels of the status colors above, for Tailwind's
+     rgb(var(...) / <alpha-value>) opacity-modifier pattern. Same values in
+     every block below (light + both dark variants) — status colors are
+     fixed and never re-skinned by theme. */
+  --status-ok-rgb: 31 157 87;
+  --status-warn-rgb: 201 138 14;
+  --status-danger-rgb: 210 66 54;
+  --status-info-rgb: 47 111 235;
+  --status-pay-onsite-rgb: 91 91 214;
+  --status-line-rgb: 6 199 85;
+
+  /* --- ink scale + lines --- */
+  --ink-900: #15181b;
+  --ink-700: #3a3f45;
+  --ink-500: #6b7178;
+  --ink-300: #a9aeb4;
+  --line-100: #e4e6e3;
+  --line-300: #cdd0cc;
+
+  /* --- app-shell surface layers (derived from the scale above) --- */
+  --bg: #ffffff;
+  --surface: #ffffff;
+  --surface-2: color-mix(in oklab, var(--ink-900) 3%, white);
+  --fg: var(--ink-900);
+  --fg-muted: var(--ink-500);
+
+  /* --- type --- */
+  --sans:
+    'Noto Sans Thai', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue',
+    Arial, sans-serif;
+  --disp: var(--sans);
+  --mono: ui-monospace, 'SF Mono', 'Cascadia Code', 'Roboto Mono', Menlo, Consolas, monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ink-900: #f2f3f1;
+    --ink-700: #cdd0cc;
+    --ink-500: #9aa0a6;
+    --ink-300: #5b6067;
+    --line-100: #2a2d30;
+    --line-300: #3a3f45;
+
+    --bg: #121416;
+    --surface: #1a1d20;
+    --surface-2: color-mix(in oklab, white 4%, #1a1d20);
+    --fg: var(--ink-900);
+    --fg-muted: var(--ink-500);
+
+    --accent-tint: color-mix(in oklab, var(--accent), black 78%);
+    --accent-tint-strong: color-mix(in oklab, var(--accent), black 62%);
+
+    /* Status colors are fixed — same channel values as :root, repeated
+       here only so this block is a complete, self-contained token set. */
+    --status-ok-rgb: 31 157 87;
+    --status-warn-rgb: 201 138 14;
+    --status-danger-rgb: 210 66 54;
+    --status-info-rgb: 47 111 235;
+    --status-pay-onsite-rgb: 91 91 214;
+    --status-line-rgb: 6 199 85;
+  }
+}
+
+:root[data-theme='dark'] {
+  --ink-900: #f2f3f1;
+  --ink-700: #cdd0cc;
+  --ink-500: #9aa0a6;
+  --ink-300: #5b6067;
+  --line-100: #2a2d30;
+  --line-300: #3a3f45;
+
+  --bg: #121416;
+  --surface: #1a1d20;
+  --surface-2: color-mix(in oklab, white 4%, #1a1d20);
+  --fg: var(--ink-900);
+  --fg-muted: var(--ink-500);
+
+  --accent-tint: color-mix(in oklab, var(--accent), black 78%);
+  --accent-tint-strong: color-mix(in oklab, var(--accent), black 62%);
+
+  /* Status colors are fixed — same channel values as :root, repeated
+     here only so this block is a complete, self-contained token set. */
+  --status-ok-rgb: 31 157 87;
+  --status-warn-rgb: 201 138 14;
+  --status-danger-rgb: 210 66 54;
+  --status-info-rgb: 47 111 235;
+  --status-pay-onsite-rgb: 91 91 214;
+  --status-line-rgb: 6 199 85;
+}
+
+@layer base {
+  body {
+    background-color: var(--bg);
+    color: var(--fg);
+    font-family: var(--sans);
+  }
+}
+
+@layer utilities {
+  /* "scoreboard" numerals — times/prices/codes (lib/format.ts consumers). */
+  .font-score {
+    font-family: var(--mono);
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: 'tnum' 1;
+  }
+}

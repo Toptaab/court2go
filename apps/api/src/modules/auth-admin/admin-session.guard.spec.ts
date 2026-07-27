@@ -1,6 +1,7 @@
 import type { ExecutionContext } from '@nestjs/common';
 import type { AdminSession, AdminUser } from '../../generated/prisma/client';
 import { ApiError } from '../../common/api-error';
+import { tenantContextStorage } from '../../prisma/tenant-context';
 import { ADMIN_SESSION_COOKIE, AdminSessionGuard } from './admin-session.guard';
 import type { AdminSessionsRepository } from './admin-sessions.repository';
 import type { AdminUsersRepository } from '../admin-users/admin-users.repository';
@@ -56,17 +57,31 @@ function build() {
   return { guard, adminSessions, adminUsers };
 }
 
+/** Runs `fn` inside the same ALS context `TenantContextMiddleware` would
+ * have pinned before this guard ever runs in a real request. */
+function withTenantContext<T>(fn: () => Promise<T>): Promise<T> {
+  return tenantContextStorage.run({ tenantId: 'tenant-1' }, fn);
+}
+
 describe('AdminSessionGuard', () => {
   it('throws unauthenticated when no cookie is present', async () => {
     const { guard } = build();
     await expect(guard.canActivate(makeContext({}))).rejects.toMatchObject({ code: 'UNAUTHENTICATED' });
   });
 
+  it('throws unauthenticated (not a 500) when a cookie is present but no tenant context was pinned — e.g. an expired/revoked/garbage session cookie with no x-tenant-id header (ARCHITECTURE §2.2 fail-closed)', async () => {
+    const { guard, adminSessions } = build();
+    await expect(
+      guard.canActivate(makeContext({ [ADMIN_SESSION_COOKIE]: 'sess-1' })),
+    ).rejects.toMatchObject({ code: 'UNAUTHENTICATED' });
+    expect(adminSessions.findValid).not.toHaveBeenCalled();
+  });
+
   it('throws unauthenticated when the cookie does not resolve to a valid session', async () => {
     const { guard, adminSessions } = build();
     adminSessions.findValid.mockResolvedValue(null);
     await expect(
-      guard.canActivate(makeContext({ [ADMIN_SESSION_COOKIE]: 'bogus' })),
+      withTenantContext(() => guard.canActivate(makeContext({ [ADMIN_SESSION_COOKIE]: 'bogus' }))),
     ).rejects.toMatchObject({ code: 'UNAUTHENTICATED' });
   });
 
@@ -75,7 +90,7 @@ describe('AdminSessionGuard', () => {
     adminSessions.findValid.mockResolvedValue(adminSession());
     adminUsers.findById.mockResolvedValue(null);
     await expect(
-      guard.canActivate(makeContext({ [ADMIN_SESSION_COOKIE]: 'sess-1' })),
+      withTenantContext(() => guard.canActivate(makeContext({ [ADMIN_SESSION_COOKIE]: 'sess-1' }))),
     ).rejects.toMatchObject({ code: 'UNAUTHENTICATED' });
   });
 
@@ -84,7 +99,7 @@ describe('AdminSessionGuard', () => {
     adminSessions.findValid.mockResolvedValue(adminSession());
     adminUsers.findById.mockResolvedValue(adminUser({ isActive: false }));
     await expect(
-      guard.canActivate(makeContext({ [ADMIN_SESSION_COOKIE]: 'sess-1' })),
+      withTenantContext(() => guard.canActivate(makeContext({ [ADMIN_SESSION_COOKIE]: 'sess-1' }))),
     ).rejects.toMatchObject({ code: 'UNAUTHENTICATED' });
   });
 
@@ -94,7 +109,7 @@ describe('AdminSessionGuard', () => {
     adminUsers.findById.mockResolvedValue(adminUser());
     const ctx = makeContext({ [ADMIN_SESSION_COOKIE]: 'sess-1' });
 
-    await expect(guard.canActivate(ctx)).resolves.toBe(true);
+    await expect(withTenantContext(() => guard.canActivate(ctx))).resolves.toBe(true);
 
     const req = (ctx.switchToHttp().getRequest as any)();
     expect(req.adminAuth).toEqual({ sessionId: 'sess-1', adminUser: adminUser() });

@@ -36,4 +36,24 @@ export class TenantsRepository {
   ): Promise<Tenant> {
     return this.prisma.raw().tenant.update({ where: { id }, data: branding });
   }
+
+  /**
+   * Resolves the `tenantId` pinned to a live Member/Admin session, calling
+   * the `resolve_session_tenant` SECURITY DEFINER function (see migration
+   * `20260727042112_resolve_session_tenant_fn`). Used by
+   * `TenantContextMiddleware` (ARCHITECTURE §2.2) to derive tenant context
+   * from an authenticated session cookie BEFORE any RLS-scoped query can
+   * run — the same chicken-and-egg reason `findBySlug` above bypasses
+   * `withTenant()`.
+   *
+   * Returns `null` for any invalid/expired/revoked/garbage session id
+   * (the function itself fails closed) — callers must treat that as "no
+   * session tenant resolved", not an error.
+   */
+  async resolveSessionTenant(kind: 'member' | 'admin', sessionId: string): Promise<string | null> {
+    const rows = await this.prisma.raw().$queryRaw<
+      { resolve_session_tenant: string | null }[]
+    >`SELECT resolve_session_tenant(${kind}, ${sessionId})`;
+    return rows[0]?.resolve_session_tenant ?? null;
+  }
 }
