@@ -42,6 +42,20 @@ export function ictLocalToUtcIso(localDateTime: string): string {
   return new Date(Date.UTC(y, mo - 1, d, h, mi) - 7 * 60 * 60 * 1000).toISOString();
 }
 
+/**
+ * The inverse of `ictLocalToUtcIso` — a UTC ISO instant → the `<input
+ * type="datetime-local">` wall-clock string (`YYYY-MM-DDTHH:mm`) an ICT
+ * viewer would see. Needed wherever an edit form pre-fills a datetime-local
+ * input from a value the server already returned (e.g. the promotions
+ * editor's `validFrom`/`validUntil`, M10.10) — `new Date(iso).toISOString()`
+ * would be wrong here for the same reason `ictLocalToUtcIso`'s own doc
+ * comment gives: the browser's local timezone must never leak in.
+ */
+export function utcIsoToIctLocal(iso: string): string {
+  const ict = new Date(new Date(iso).getTime() + 7 * 60 * 60 * 1000);
+  return ict.toISOString().slice(0, 16);
+}
+
 const THAI_DAY_NAMES = ['อา', 'จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส'];
 
 /** `YYYY-MM-DD` → short Thai-day-name label, e.g. `"จ 28/07"`. */

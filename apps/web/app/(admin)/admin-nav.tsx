@@ -31,8 +31,14 @@ const NAV_ITEMS: NavItem[] = [
   { href: '/admin/promotions', label: 'โปรโมชั่น / Promotions', roles: ['OWNER', 'ADMIN'] },
   { href: '/admin/news', label: 'ข่าวสาร / News', roles: ['OWNER', 'ADMIN'] },
   { href: '/admin/members', label: 'สมาชิก / Members', roles: [] },
-  { href: '/admin/config', label: 'ตั้งค่า / Settings', roles: ['OWNER', 'ADMIN'] },
-  { href: '/admin/admin-users', label: 'ผู้ดูแล / Admin Users', roles: ['OWNER', 'ADMIN'] },
+  // Settings group (M10.10, Design D14/D15/D16) — Tenant-wide config,
+  // branding, admin-user management, and the roles matrix are all
+  // Owner/Admin-only (a Branch-Admin never manages other admins or
+  // Tenant-wide settings, PRD A8/A9).
+  { href: '/admin/settings/config', label: 'ตั้งค่าระบบ / Config', roles: ['OWNER', 'ADMIN'] },
+  { href: '/admin/settings/branding', label: 'แบรนด์ / Branding', roles: ['OWNER', 'ADMIN'] },
+  { href: '/admin/settings/admin-users', label: 'ผู้ดูแล / Admin Users', roles: ['OWNER', 'ADMIN'] },
+  { href: '/admin/settings/roles', label: 'สิทธิ์การใช้งาน / Roles', roles: ['OWNER', 'ADMIN'] },
 ];
 
 /**

@@ -53,4 +53,29 @@ export const queryKeys = {
   adminCourtsListPrefix: () => ['admin', 'catalog', 'courts', 'list'] as const,
   adminCourtDetail: (courtId: string) => ['admin', 'catalog', 'courts', courtId] as const,
   adminCourtBlocks: (courtId: string) => ['admin', 'catalog', 'courts', courtId, 'blocks'] as const,
+
+  // --- Admin misc (M10.10) ---
+  adminPromotions: () => ['admin', 'promotions', 'list'] as const,
+  adminPromotionDetail: (promotionId: string) => ['admin', 'promotions', promotionId] as const,
+  adminPromotionUsage: (promotionId: string, page?: number) =>
+    ['admin', 'promotions', promotionId, 'usage', { page }] as const,
+
+  adminNews: (page?: number) => ['admin', 'news', 'list', { page }] as const,
+  /** Prefix shared by every `adminNews(page)` key. */
+  adminNewsListPrefix: () => ['admin', 'news', 'list'] as const,
+  adminNewsDetail: (newsId: string) => ['admin', 'news', newsId] as const,
+
+  adminMembers: (params: Record<string, unknown>) => ['admin', 'members', 'list', params] as const,
+  /** Prefix shared by every `adminMembers(params)` key. */
+  adminMembersListPrefix: () => ['admin', 'members', 'list'] as const,
+  adminMemberDetail: (memberId: string) => ['admin', 'members', memberId] as const,
+  adminMemberBookings: (memberId: string, page?: number) =>
+    ['admin', 'members', memberId, 'bookings', { page }] as const,
+
+  adminConfig: () => ['admin', 'settings', 'config'] as const,
+  adminBranding: () => ['admin', 'settings', 'branding'] as const,
+
+  adminUsers: () => ['admin', 'admin-users', 'list'] as const,
+  adminUserDetail: (adminUserId: string) => ['admin', 'admin-users', adminUserId] as const,
+  adminRolesMatrix: () => ['admin', 'roles-matrix'] as const,
 };
