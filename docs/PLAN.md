@@ -94,6 +94,11 @@ App Router, TanStack Query, Tailwind, bound to Claude Design pages + `@repo/type
 - **Model split:** build/executor agents (`nextjs-frontend`, `nestjs-backend`, `caveman:cavecrew-builder`) run on the LOWER model — spawn them with `model: "sonnet"`. Reserve the higher model (opus) for design-heavy planning and the `reviewer` pass.
 - **Sequential under lead:** dispatch slices ONE AT A TIME in the order below, not parallel blind runs — this holds cross-slice consistency (shared client, tokens, hook patterns). The `reviewer` runs per slice; a slice is done only when its exit check passes AND reviewer is clean. Later slices build on merged earlier ones.
 - **Name files + reuse targets in every prompt:** each build-agent prompt must pass the slice's exact files/dirs + REUSE targets (below) so the agent binds existing schemas/patterns instead of re-exploring the repo. Every slice after M10.1 says "follow M10.1 conventions."
+- **Token-efficiency rules (MUST pass verbatim into every `nextjs-frontend` prompt — these improve consistency, they do NOT lower code quality):**
+  1. **Tokens cached local.** M10.1 extracts the Claude Design tokens ONCE into local files (`apps/web/app/globals.css` + `tailwind.config.ts`). Slices M10.2+ read those LOCAL files as the source of truth — do NOT re-fetch tokens/design pages from the claude-design MCP. One local source = cross-slice consistency.
+  2. **`render_preview` = final-layout check only.** Use claude-design `render_preview` at most ONCE per slice, only to verify the finished layout against design — not iteratively while building (it returns screenshots = the main token sink). Do NOT drop it entirely; it is the design-fidelity anchor.
+  3. **Tail verbose output.** Pipe `next build` / `pnpm install` (and any noisy command) through `2>&1 | tail -30` so only the tail lands in context.
+  4. **Bind the named schema, don't re-read the contract.** Import the exact `@repo/types` schema from the slice's REUSE list; do NOT re-read the full `docs/openapi.yaml` (1651 lines) each slice.
 
 ### M10 slices (ordered, each ≈ one build-agent run)
 
