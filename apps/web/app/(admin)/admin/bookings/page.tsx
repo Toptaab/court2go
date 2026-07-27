@@ -7,6 +7,7 @@ import { formatIctDate, formatIctTime, formatTHB } from '@/lib/format';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { BookingStatusBadge } from '@/components/ui/badge';
+import { PageHeader } from '@/components/admin/page-header';
 
 /**
  * Admin booking list (Design D2). Filterable, paginated list of all bookings.
@@ -24,9 +25,7 @@ export default function AdminBookingsPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-lg font-semibold text-fg">การจองทั้งหมด / All Bookings</h1>
-      </div>
+      <PageHeader title="การจองทั้งหมด / All Bookings" />
 
       {/* Filters */}
       <div className="flex flex-wrap gap-3">
