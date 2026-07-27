@@ -1,12 +1,12 @@
 import { requireMemberSession } from '@/lib/auth/guards';
-import { ProfileView } from './profile-view';
+import { AccountTabs } from './account-tabs';
 
 /**
- * Member profile page (Design M19). Server Component that guards the session,
- * then renders the client ProfileView with the resolved member data.
+ * Member account page with tabs (Design M14/M19 — acctabs component).
+ * Server Component guards the session, then renders tabbed client view.
  */
 export default async function MemberAccountPage() {
   const me = await requireMemberSession('/login');
 
-  return <ProfileView initialMe={me} />;
+  return <AccountTabs initialMe={me} />;
 }
