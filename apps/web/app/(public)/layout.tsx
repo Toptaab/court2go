@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { ThemeContainer } from '@/components/ui/theme-container';
+import { BottomTabBar } from '@/components/bottom-tab-bar';
 
 /**
  * Client (public) shell — mobile-first, per docs/DESIGN.md `client-mobile.html`.
@@ -23,7 +24,8 @@ import { ThemeContainer } from '@/components/ui/theme-container';
 export default function PublicLayout({ children }: { children: ReactNode }) {
   return (
     <ThemeContainer className="mx-auto flex min-h-screen w-full max-w-md flex-col">
-      <main className="flex-1 px-4 pb-8 pt-6">{children}</main>
+      <main className="flex-1 pb-20">{children}</main>
+      <BottomTabBar />
     </ThemeContainer>
   );
 }

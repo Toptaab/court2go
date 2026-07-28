@@ -5,9 +5,9 @@ import { usePathname } from "next/navigation";
 
 const tabs = [
   {
-    label: "News",
-    href: "/news",
-    matchPrefix: "/news",
+    label: "Home",
+    href: "/",
+    matchPrefix: ["/news"],
     icon: (active: boolean) => (
       <svg
         width="22"
@@ -20,17 +20,15 @@ const tabs = [
         strokeLinejoin="round"
         className={active ? "text-accent" : "text-ink-500"}
       >
-        <path d="M4 22h16a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v16a2 2 0 0 1-2 2Zm0 0a2 2 0 0 1-2-2v-9c0-1.1.9-2 2-2h2" />
-        <path d="M18 14h-8" />
-        <path d="M15 18h-5" />
-        <path d="M10 6h8v4h-8V6Z" />
+        <path d="M3 9.5L12 3l9 6.5V20a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9.5z" />
+        <polyline points="9 22 9 12 15 12 15 22" />
       </svg>
     ),
   },
   {
-    label: "Book",
+    label: "Booking",
     href: "/bookings",
-    matchPrefix: "/bookings",
+    matchPrefix: ["/bookings"],
     icon: (active: boolean) => (
       <svg
         width="22"
@@ -51,9 +49,9 @@ const tabs = [
     ),
   },
   {
-    label: "Me",
+    label: "Account",
     href: "/account",
-    matchPrefix: "/account",
+    matchPrefix: ["/account"],
     icon: (active: boolean) => (
       <svg
         width="22"
@@ -73,14 +71,33 @@ const tabs = [
   },
 ];
 
+/** Paths where the tab bar should be hidden (payment/login flow only) */
+const HIDDEN_PREFIXES = ["/booking/payment", "/booking/login", "/booking/otp"];
+
 export function BottomTabBar() {
   const pathname = usePathname();
 
+  // Hide only during payment and login screens
+  const shouldHide = HIDDEN_PREFIXES.some((prefix) =>
+    pathname.startsWith(prefix),
+  );
+  if (shouldHide) return null;
+
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-50 mx-auto flex w-full max-w-md border-t border-line-100 bg-surface">
+    <nav
+      className="fixed bottom-0 left-0 right-0 z-50 mx-auto flex w-full max-w-md border-t border-line-100 bg-surface pb-[env(safe-area-inset-bottom)]"
+      aria-label="Main navigation"
+    >
       {tabs.map((tab) => {
-        const isActive =
-          pathname === tab.href || pathname.startsWith(tab.matchPrefix + "/");
+        let isActive: boolean;
+        if (tab.href === "/") {
+          // Home highlights for home, branches, booking flow, and news
+          isActive = pathname === "/" || pathname.startsWith("/news");
+          
+        } else {
+          isActive =
+            pathname === tab.href || pathname.startsWith(tab.matchPrefix + "/");
+        }
         return (
           <Link
             key={tab.href}
@@ -88,6 +105,7 @@ export function BottomTabBar() {
             className={`flex flex-1 flex-col items-center justify-center gap-0.5 py-2 ${
               isActive ? "text-accent" : "text-ink-500"
             }`}
+            aria-current={isActive ? "page" : undefined}
           >
             {tab.icon(isActive)}
             <span className="text-[10px] font-medium">{tab.label}</span>
