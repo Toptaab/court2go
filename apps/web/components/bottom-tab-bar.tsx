@@ -51,7 +51,7 @@ const tabs = [
   {
     label: "Account",
     href: "/account",
-    matchPrefix: ["/account"],
+    matchPrefix: ["/account","/login"],
     icon: (active: boolean) => (
       <svg
         width="22"
@@ -89,15 +89,9 @@ export function BottomTabBar() {
       aria-label="Main navigation"
     >
       {tabs.map((tab) => {
-        let isActive: boolean;
-        if (tab.href === "/") {
-          // Home highlights for home, branches, booking flow, and news
-          isActive = pathname === "/" || pathname.startsWith("/news");
-          
-        } else {
-          isActive =
-            pathname === tab.href || pathname.startsWith(tab.matchPrefix + "/");
-        }
+        const isActive =
+          pathname === tab.href ||
+          tab.matchPrefix.some((prefix) => pathname.startsWith(prefix));
         return (
           <Link
             key={tab.href}
