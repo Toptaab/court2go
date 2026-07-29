@@ -76,7 +76,7 @@ export function RolesMatrix() {
 
   return (
     <Card>
-      <CardContent className="flex flex-col gap-3 p-4">
+      <CardContent className="flex flex-col gap-2 p-3">
         <div>
           <h2 className="text-sm font-semibold text-fg">สิทธิ์การใช้งาน / Roles &amp; capabilities</h2>
           <p className="text-xs text-fg-muted">
@@ -91,12 +91,12 @@ export function RolesMatrix() {
 
         {data && (
           <div className="overflow-x-auto">
-            <table className="w-full border-collapse text-sm">
+            <table className="w-full border-collapse text-xs">
               <thead>
                 <tr className="border-b border-line-100">
-                  <th className="p-3 text-left font-medium text-fg-muted">สิ่งที่ทำได้ / What they can do</th>
+                  <th className="p-1.5 text-left font-medium text-fg-muted">สิ่งที่ทำได้ / What they can do</th>
                   {data.roles.map((role) => (
-                    <th key={role} className="p-3 text-center font-medium text-fg-muted">{role}</th>
+                    <th key={role} className="p-1.5 text-center font-medium text-fg-muted">{role}</th>
                   ))}
                 </tr>
               </thead>
@@ -104,14 +104,17 @@ export function RolesMatrix() {
                 {data.capabilities.map((cap) => {
                   const copy = CAPABILITY_COPY[cap.key];
                   return (
-                    <tr key={cap.key} className="border-b border-line-100 last:border-0 align-top">
-                      <td className="p-3 text-fg">
-                        <div className="font-medium">{copy ? copy.en : cap.label}</div>
-                        {copy && <div className="text-xs text-fg-muted">{copy.th}</div>}
-                        <div className="mt-0.5 text-xs text-fg-muted">{copy?.hint ?? cap.label}</div>
+                    <tr
+                      key={cap.key}
+                      className="border-b border-line-100 last:border-0"
+                      title={copy?.hint ?? cap.label}
+                    >
+                      <td className="p-1.5 text-fg">
+                        <span className="font-medium">{copy ? copy.en : cap.label}</span>
+                        {copy && <span className="text-fg-muted"> · {copy.th}</span>}
                       </td>
                       {data.roles.map((role) => (
-                        <td key={role} className="p-3 text-center">
+                        <td key={role} className="p-1.5 text-center">
                           {cap.allowed[role] ? (
                             <span className="text-status-ok">✓</span>
                           ) : (
