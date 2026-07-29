@@ -1,19 +1,47 @@
 'use client';
 
 import { useState } from 'react';
-import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import type { MemberAdminView } from '@repo/types';
 import { useAdminMembers } from '@/lib/hooks/use-admin-members';
 import { formatIctDateTime } from '@/lib/format';
-import { Card, CardContent } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { PaginatedTable, type DataTableColumn } from '@/components/ui/paginated-list';
 
 /** Member list (Design D12, PRD A7) — searchable by phone/name, paginated. */
 export default function AdminMembersPage() {
+  const router = useRouter();
   const [page, setPage] = useState(1);
   const [q, setQ] = useState('');
   const { data, isLoading, isError } = useAdminMembers({ page, q: q || undefined });
+
+  const columns: DataTableColumn<MemberAdminView>[] = [
+    {
+      header: 'Member',
+      cell: (member) => (
+        <>
+          <div className="flex items-center gap-2">
+            <span className="font-medium text-fg">{member.name ?? member.phone ?? '—'}</span>
+            {member.isBlocked && <Badge variant="danger">ระงับ / Blocked</Badge>}
+          </div>
+          <div className="font-mono text-xs text-fg-muted">{member.phone ?? 'ไม่มีเบอร์ / No phone'}</div>
+        </>
+      ),
+    },
+    {
+      header: 'Bookings',
+      cell: (member) => <span className="font-score text-xs text-fg">{member.bookingCount}</span>,
+    },
+    {
+      header: 'Last booking',
+      cell: (member) => (
+        <span className="font-score text-xs text-fg-muted">
+          {member.lastBookingAt ? formatIctDateTime(member.lastBookingAt) : '—'}
+        </span>
+      ),
+    },
+  ];
 
   return (
     <div className="flex flex-col gap-4">
@@ -30,57 +58,18 @@ export default function AdminMembersPage() {
         className="max-w-sm"
       />
 
-      {isLoading && (
-        <div className="flex flex-col gap-3">
-          {Array.from({ length: 5 }).map((_, i) => (
-            <div key={i} className="h-16 animate-pulse rounded-card bg-surface-2" />
-          ))}
-        </div>
-      )}
-
-      {isError && (
-        <p className="text-sm text-status-danger">เกิดข้อผิดพลาดในการโหลดข้อมูล / Failed to load members.</p>
-      )}
-
-      {data && data.items.length === 0 && (
-        <p className="py-8 text-center text-sm text-fg-muted">ไม่พบสมาชิก / No members found.</p>
-      )}
-
-      {data?.items.map((member) => (
-        <Link key={member.id} href={`/admin/members/${member.id}`}>
-          <Card className="transition-shadow hover:shadow-md">
-            <CardContent className="flex items-center justify-between gap-4 p-4">
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-semibold text-fg">{member.name ?? member.phone ?? '—'}</span>
-                  {member.isBlocked && <Badge variant="danger">ระงับ / Blocked</Badge>}
-                </div>
-                <p className="mt-0.5 text-xs text-fg-muted">{member.phone ?? 'ไม่มีเบอร์ / No phone'}</p>
-              </div>
-              <div className="text-right">
-                <p className="font-score text-xs text-fg">{member.bookingCount} การจอง / bookings</p>
-                {member.lastBookingAt && (
-                  <p className="font-score text-xs text-fg-muted">{formatIctDateTime(member.lastBookingAt)}</p>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        </Link>
-      ))}
-
-      {data && (data.hasNextPage || page > 1) && (
-        <div className="flex items-center justify-between pt-2">
-          <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
-            ก่อนหน้า / Prev
-          </Button>
-          <span className="font-score text-xs text-fg-muted">
-            {page} / {Math.max(1, Math.ceil(data.total / data.pageSize))}
-          </span>
-          <Button variant="outline" size="sm" disabled={!data.hasNextPage} onClick={() => setPage((p) => p + 1)}>
-            ถัดไป / Next
-          </Button>
-        </div>
-      )}
+      <PaginatedTable
+        data={data}
+        isLoading={isLoading}
+        isError={isError}
+        page={page}
+        onPageChange={setPage}
+        columns={columns}
+        keyOf={(member) => member.id}
+        onRowClick={(member) => router.push(`/admin/members/${member.id}`)}
+        emptyMessage="ไม่พบสมาชิก / No members found."
+        errorMessage="เกิดข้อผิดพลาดในการโหลดข้อมูล / Failed to load members."
+      />
     </div>
   );
 }

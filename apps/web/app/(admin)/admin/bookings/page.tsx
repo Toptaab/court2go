@@ -2,39 +2,192 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import type { BookingListItem } from '@repo/types';
 import { useAdminBookings } from '@/lib/hooks/use-admin-bookings';
+import { useBranches } from '@/lib/hooks/use-public-catalog';
+import { useAdminSports } from '@/lib/hooks/use-admin-catalog';
+import { getDevDefaultTenantSlug } from '@/lib/tenant';
 import { formatIctDate, formatIctTime, formatTHB } from '@/lib/format';
-import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { BookingStatusBadge } from '@/components/ui/badge';
+import { BookingStatusBadge, PaymentStatusBadge } from '@/components/ui/badge';
+import { PaginatedTable, type DataTableColumn } from '@/components/ui/paginated-list';
 import { PageHeader } from '@/components/admin/page-header';
+import { WalkInModal } from '@/components/admin/walk-in-modal';
+import { cn } from '@/lib/utils';
 
 /**
- * Admin booking list (Design D2). Filterable, paginated list of all bookings.
+ * Admin booking list (Design D2). Filterable, paginated table of all
+ * bookings — quick chips for the two "needs my attention" queues, then
+ * branch/sport/date/status filters + a phone search, mirroring the
+ * mockup's `.filters` row.
  */
 export default function AdminBookingsPage() {
+  const slug = getDevDefaultTenantSlug();
+  const router = useRouter();
+
   const [page, setPage] = useState(1);
+  const [activeQuick, setActiveQuick] = useState<'awaiting-review' | 'cancellation-requested' | null>(null);
   const [statusFilter, setStatusFilter] = useState<string | undefined>();
+  const [branchId, setBranchId] = useState<string | undefined>();
+  const [sportId, setSportId] = useState<string | undefined>();
+  const [dateFrom, setDateFrom] = useState<string | undefined>();
+  const [dateTo, setDateTo] = useState<string | undefined>();
   const [phoneFilter, setPhoneFilter] = useState('');
+  const [walkInOpen, setWalkInOpen] = useState(false);
+
+  const { data: branches } = useBranches(slug);
+  const { data: sports } = useAdminSports();
+
+  const toggleQuick = (key: 'awaiting-review' | 'cancellation-requested') => {
+    setActiveQuick((prev) => (prev === key ? null : key));
+    setPage(1);
+  };
+
+  const columns: DataTableColumn<BookingListItem>[] = [
+    {
+      header: 'Booking',
+      cell: (item) => (
+        <Link
+          href={`/admin/bookings/${item.id}`}
+          onClick={(e) => e.stopPropagation()}
+          className="font-mono text-xs font-semibold text-accent hover:underline"
+        >
+          #{item.id.slice(0, 8)}
+        </Link>
+      ),
+    },
+    {
+      header: 'Customer',
+      cell: (item) => (
+        <>
+          <div className="font-medium text-fg">{item.memberName ?? '—'}</div>
+          {item.memberPhone && <div className="font-mono text-xs text-fg-muted">{item.memberPhone}</div>}
+        </>
+      ),
+    },
+    { header: 'Court', cell: (item) => <span className="text-fg">{item.courtName} · {item.sportName}</span> },
+    {
+      header: 'When',
+      cell: (item) => (
+        <span className="font-score text-xs text-fg">
+          {formatIctDate(item.startsAt)} · {formatIctTime(item.startsAt)}–{formatIctTime(item.endsAt)}
+        </span>
+      ),
+    },
+    {
+      header: 'Amount',
+      cell: (item) => <span className="font-score text-sm font-semibold text-fg">{formatTHB(item.amountDue)}</span>,
+    },
+    { header: 'Booking status', cell: (item) => <BookingStatusBadge status={item.status} /> },
+    { header: 'Payment', cell: (item) => <PaymentStatusBadge status={item.paymentStatus} /> },
+  ];
 
   const { data, isLoading } = useAdminBookings({
     page,
-    status: statusFilter,
+    status: activeQuick === 'cancellation-requested' ? 'CANCELLATION_REQUESTED' : statusFilter,
+    paymentStatus: activeQuick === 'awaiting-review' ? 'SLIP_UPLOADED_PENDING_REVIEW' : undefined,
+    branchId,
+    sportId,
+    dateFrom,
+    dateTo,
     phone: phoneFilter || undefined,
   });
 
   return (
     <div className="flex flex-col gap-4">
-      <PageHeader title="การจองทั้งหมด / All Bookings" />
+      <PageHeader
+        title="การจองทั้งหมด / All Bookings"
+        subtitle={
+          data
+            ? `ทุกสาขา · ${data.total} ผลลัพธ์ / All branches · ${data.total} results`
+            : 'ทุกสาขา / All branches'
+        }
+        actions={
+          <>
+            <Button type="button" variant="outline" size="sm">
+              ส่งออก / Export
+            </Button>
+            <Button type="button" variant="primary" size="sm" onClick={() => setWalkInOpen(true)}>
+              + จองหน้างาน / Walk-in booking
+            </Button>
+          </>
+        }
+      />
 
       {/* Filters */}
-      <div className="flex flex-wrap gap-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          onClick={() => toggleQuick('awaiting-review')}
+          className={cn(
+            'inline-flex items-center gap-1.5 rounded-card border px-3 py-1.5 text-xs font-semibold transition-colors',
+            activeQuick === 'awaiting-review'
+              ? 'border-accent bg-accent-tint text-accent'
+              : 'border-line-300 bg-surface text-fg-muted hover:bg-surface-2',
+          )}
+        >
+          รอตรวจสอบ / Awaiting my review
+        </button>
+        <button
+          type="button"
+          onClick={() => toggleQuick('cancellation-requested')}
+          className={cn(
+            'inline-flex items-center gap-1.5 rounded-card border px-3 py-1.5 text-xs font-semibold transition-colors',
+            activeQuick === 'cancellation-requested'
+              ? 'border-status-danger bg-status-danger/10 text-status-danger'
+              : 'border-line-300 bg-surface text-fg-muted hover:bg-surface-2',
+          )}
+        >
+          ขอยกเลิก / Cancellation requested
+        </button>
+
+        <select
+          value={branchId ?? ''}
+          onChange={(e) => { setBranchId(e.target.value || undefined); setPage(1); }}
+          className="rounded-card border border-line-300 bg-surface px-3 py-1.5 text-xs text-fg"
+        >
+          <option value="">สาขา: ทั้งหมด / Branch: All</option>
+          {branches?.map((b) => (
+            <option key={b.id} value={b.id}>{b.name}</option>
+          ))}
+        </select>
+
+        <select
+          value={sportId ?? ''}
+          onChange={(e) => { setSportId(e.target.value || undefined); setPage(1); }}
+          className="rounded-card border border-line-300 bg-surface px-3 py-1.5 text-xs text-fg"
+        >
+          <option value="">กีฬา: ทั้งหมด / Sport: All</option>
+          {sports?.map((s) => (
+            <option key={s.id} value={s.id}>{s.name}</option>
+          ))}
+        </select>
+
+        <div className="flex items-center gap-1">
+          <input
+            type="date"
+            aria-label="วันที่เริ่ม / Date from"
+            value={dateFrom ?? ''}
+            onChange={(e) => { setDateFrom(e.target.value || undefined); setPage(1); }}
+            className="rounded-card border border-line-300 bg-surface px-2 py-1.5 text-xs text-fg"
+          />
+          <span className="text-xs text-fg-muted">–</span>
+          <input
+            type="date"
+            aria-label="ถึงวันที่ / Date to"
+            value={dateTo ?? ''}
+            onChange={(e) => { setDateTo(e.target.value || undefined); setPage(1); }}
+            className="rounded-card border border-line-300 bg-surface px-2 py-1.5 text-xs text-fg"
+          />
+        </div>
+
         <select
           value={statusFilter ?? ''}
-          onChange={(e) => { setStatusFilter(e.target.value || undefined); setPage(1); }}
-          className="rounded-card border border-line-300 bg-surface px-3 py-2 text-sm text-fg"
+          onChange={(e) => { setStatusFilter(e.target.value || undefined); setActiveQuick(null); setPage(1); }}
+          className="rounded-card border border-line-300 bg-surface px-3 py-1.5 text-xs text-fg"
         >
-          <option value="">สถานะทั้งหมด / All statuses</option>
+          <option value="">สถานะ: ทั้งหมด / Status: Any</option>
           <option value="PENDING_VERIFICATION">Pending Verification</option>
           <option value="PENDING_PAYMENT">Pending Payment</option>
           <option value="PENDING_PAYMENT_CONFIRMATION">Pending Confirmation</option>
@@ -46,78 +199,42 @@ export default function AdminBookingsPage() {
           <option value="COMPLETED">Completed</option>
           <option value="NO_SHOW">No Show</option>
         </select>
-        <input
-          type="text"
-          placeholder="ค้นหาเบอร์โทร / Search phone"
-          value={phoneFilter}
-          onChange={(e) => { setPhoneFilter(e.target.value); setPage(1); }}
-          className="rounded-card border border-line-300 bg-surface px-3 py-2 text-sm text-fg placeholder:text-ink-300"
-        />
+
+        <div className="ml-auto flex min-w-[210px] items-center gap-2 rounded-card border border-line-300 bg-surface px-3 py-1.5">
+          <svg aria-hidden className="h-4 w-4 shrink-0 text-fg-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+            <circle cx="11" cy="11" r="7" />
+            <path d="M21 21l-4.3-4.3" />
+          </svg>
+          <input
+            type="text"
+            placeholder="ค้นหาเบอร์โทร / Search phone / name / #ID"
+            value={phoneFilter}
+            onChange={(e) => { setPhoneFilter(e.target.value); setPage(1); }}
+            className="w-full bg-transparent text-xs text-fg placeholder:text-fg-muted focus:outline-none"
+          />
+        </div>
       </div>
 
-      {/* Loading */}
-      {isLoading && (
-        <div className="flex flex-col gap-3">
-          {Array.from({ length: 5 }).map((_, i) => (
-            <div key={i} className="h-16 animate-pulse rounded-card bg-surface-2" />
-          ))}
-        </div>
-      )}
+      <PaginatedTable
+        data={data}
+        isLoading={isLoading}
+        page={page}
+        onPageChange={setPage}
+        columns={columns}
+        keyOf={(item) => item.id}
+        onRowClick={(item) => router.push(`/admin/bookings/${item.id}`)}
+        emptyMessage="ไม่พบการจอง / No bookings found."
+        skeletonCount={6}
+        skeletonClassName="h-12"
+        minWidth="min-w-[860px]"
+      />
 
-      {/* Empty */}
-      {data && data.items.length === 0 && (
-        <p className="py-8 text-center text-sm text-fg-muted">
-          ไม่พบการจอง / No bookings found.
-        </p>
-      )}
+      <p className="text-xs text-fg-muted">
+        Branch Admins เห็นเฉพาะสาขาของตน (ไม่มีตัวกรองสาขา) ส่วน Owner/Admin เห็นทุกสาขา / Branch Admins see this
+        list locked to their branch (no branch filter). Owner/Admin see all branches.
+      </p>
 
-      {/* Table-like list */}
-      {data?.items.map((item) => (
-        <Link key={item.id} href={`/admin/bookings/${item.id}`}>
-          <Card className="transition-shadow hover:shadow-md">
-            <CardContent className="flex items-center gap-4 p-4">
-              <div className="flex-1">
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-semibold text-fg">{item.courtName}</span>
-                  <BookingStatusBadge status={item.status} />
-                </div>
-                <p className="mt-0.5 text-xs text-fg-muted">
-                  {item.branchName} · {item.sportName}
-                </p>
-                <p className="mt-0.5 text-xs text-fg-muted">
-                  {item.memberPhone ?? item.memberName ?? '—'}
-                </p>
-              </div>
-              <div className="text-right">
-                <p className="font-score text-xs text-fg">
-                  {formatIctDate(item.startsAt)}
-                </p>
-                <p className="font-score text-xs text-fg-muted">
-                  {formatIctTime(item.startsAt)} – {formatIctTime(item.endsAt)}
-                </p>
-                <p className="mt-1 font-score text-sm font-semibold text-accent">
-                  {formatTHB(item.amountDue)}
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-        </Link>
-      ))}
-
-      {/* Pagination */}
-      {data && (data.hasNextPage || page > 1) && (
-        <div className="flex items-center justify-between pt-2">
-          <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
-            ก่อนหน้า / Prev
-          </Button>
-          <span className="font-score text-xs text-fg-muted">
-            {page} / {Math.ceil(data.total / data.pageSize)}
-          </span>
-          <Button variant="outline" size="sm" disabled={!data.hasNextPage} onClick={() => setPage((p) => p + 1)}>
-            ถัดไป / Next
-          </Button>
-        </div>
-      )}
+      <WalkInModal open={walkInOpen} onClose={() => setWalkInOpen(false)} />
     </div>
   );
 }

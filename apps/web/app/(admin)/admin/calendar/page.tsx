@@ -7,7 +7,9 @@ import { getDevDefaultTenantSlug } from '@/lib/tenant';
 import { formatIctTime } from '@/lib/format';
 import { formatBilingual, type Bilingual } from '@/lib/copy';
 import { Card, CardContent } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import { PageHeader } from '@/components/admin/page-header';
+import { WalkInModal } from '@/components/admin/walk-in-modal';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
 
@@ -18,6 +20,26 @@ function todayICT(): string {
   const now = new Date();
   const ict = new Date(now.getTime() + 7 * 60 * 60 * 1000);
   return ict.toISOString().slice(0, 10);
+}
+
+/** `YYYY-MM-DD` + a day delta → `YYYY-MM-DD`, for the prev/next day nav arrows. */
+function shiftDate(date: string, deltaDays: number): string {
+  const d = new Date(`${date}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + deltaDays);
+  return d.toISOString().slice(0, 10);
+}
+
+const dateNavFormatter = new Intl.DateTimeFormat('en-GB', {
+  weekday: 'short',
+  day: '2-digit',
+  month: 'short',
+  year: 'numeric',
+  timeZone: 'UTC',
+});
+
+/** `YYYY-MM-DD` → `"Fri, 25 Jul 2026"` for the date-nav label (mockup D1's `◂ Fri 25 Jul 2026 ▸`). */
+function formatDateNavLabel(date: string): string {
+  return dateNavFormatter.format(new Date(`${date}T00:00:00Z`));
 }
 
 // --- Grid lattice constants (fixed 30-min lock lattice, CLAUDE.md invariant) ---
@@ -36,20 +58,25 @@ function ictMinutesSinceMidnight(iso: string): number {
   return hh * 60 + mm;
 }
 
-type EventKind = 'ok' | 'info' | 'pay-onsite' | 'danger' | 'hatch';
+type EventKind = 'ok' | 'info' | 'warn' | 'pay-onsite' | 'danger' | 'hatch';
 
 /**
- * Booking status → event-block color bucket. Consistent with the
- * `BookingStatusBadge` semantics (components/ui/badge.tsx) collapsed to the
- * four buckets the calendar legend shows: confirmed/completed → ok,
- * pending-or-held (awaiting the client OR awaiting admin review) → info,
- * terminal-negative → danger. `pay-onsite` has no matching `BookingStatus`
- * value today (that's a `PaymentStatus`, not fetched by the calendar
- * endpoint — see `calendarItemSchema` in `use-admin-bookings.ts`); matched
- * defensively here so a future payment-aware calendar item slots in
- * without a rewrite. Anything else unrecognized (e.g. a court maintenance
- * block, if the calendar ever starts returning those) renders as the
- * neutral hatch pattern rather than being mistaken for a real booking.
+ * Booking status → event-block color bucket, matching the mockup's D1
+ * legend exactly (6 buckets): confirmed/completed → ok; still awaiting the
+ * CLIENT (pre-slip, mid-checkout hold) → info ("held"); slip uploaded and
+ * awaiting ADMIN review → its own `warn` bucket, distinct from `info` so a
+ * held checkout and a review queue don't read as the same thing; an active
+ * booking with a cancellation request pending → `danger` (the mockup's own
+ * bucket for this — it's the one row on the grid that needs urgent admin
+ * attention, so it gets the loudest color, not a muted one). `pay-onsite`
+ * has no matching `BookingStatus` value today (that's a `PaymentStatus`,
+ * not fetched by the calendar endpoint — see `calendarItemSchema` in
+ * `use-admin-bookings.ts`); matched defensively here so a future
+ * payment-aware calendar item slots in without a rewrite. Terminal-negative
+ * outcomes (rejected/expired/cancelled/no-show) are functionally "the slot
+ * is free again" from an admin's POV — same as a maintenance block — so
+ * they render as the neutral hatch pattern too, keeping `danger` reserved
+ * for the one status that still needs someone to act on it.
  */
 function eventKind(status: string): EventKind {
   switch (status) {
@@ -58,16 +85,18 @@ function eventKind(status: string): EventKind {
       return 'ok';
     case 'PENDING_VERIFICATION':
     case 'PENDING_PAYMENT':
-    case 'PENDING_PAYMENT_CONFIRMATION':
-    case 'CANCELLATION_REQUESTED':
       return 'info';
+    case 'PENDING_PAYMENT_CONFIRMATION':
+      return 'warn';
+    case 'CANCELLATION_REQUESTED':
+      return 'danger';
     case 'PAY_ONSITE_NOT_COLLECTED':
       return 'pay-onsite';
     case 'REJECTED':
     case 'EXPIRED':
     case 'CANCELLED':
     case 'NO_SHOW':
-      return 'danger';
+      return 'hatch';
     default:
       return 'hatch';
   }
@@ -76,6 +105,7 @@ function eventKind(status: string): EventKind {
 const EVENT_BLOCK_CLASSES: Record<EventKind, string> = {
   ok: 'bg-status-ok text-white',
   info: 'bg-status-info text-white',
+  warn: 'bg-status-warn text-white',
   'pay-onsite': 'bg-status-pay-onsite text-white',
   danger: 'bg-status-danger text-white',
   // Neutral diagonal-hatch over surface-3 — reads as "unavailable", never as
@@ -90,11 +120,12 @@ const HATCH_BACKGROUND: CSSProperties = {
 };
 
 const LEGEND: { kind: EventKind; label: Bilingual }[] = [
-  { kind: 'ok', label: { th: 'ยืนยันแล้ว', en: 'Confirmed' } },
-  { kind: 'info', label: { th: 'รอดำเนินการ / จองชั่วคราว', en: 'Pending / held' } },
+  { kind: 'ok', label: { th: 'ยืนยันแล้ว / ชำระแล้ว', en: 'Confirmed / Paid' } },
+  { kind: 'warn', label: { th: 'รอตรวจสอบสลิป', en: 'Pending payment review' } },
+  { kind: 'info', label: { th: 'จองชั่วคราว (ระหว่างชำระเงิน)', en: 'Held (mid-checkout)' } },
   { kind: 'pay-onsite', label: { th: 'ชำระที่สนาม', en: 'Pay onsite' } },
-  { kind: 'danger', label: { th: 'ยกเลิก / ปฏิเสธ', en: 'Cancelled / rejected' } },
-  { kind: 'hatch', label: { th: 'ปิดปรับปรุง / ไม่พร้อมใช้งาน', en: 'Maintenance / blocked' } },
+  { kind: 'danger', label: { th: 'ขอยกเลิกการจอง', en: 'Cancellation requested' } },
+  { kind: 'hatch', label: { th: 'ปิดปรับปรุง / ยกเลิกแล้ว / ไม่พร้อมใช้งาน', en: 'Maintenance / cancelled / unavailable' } },
 ];
 
 /**
@@ -110,6 +141,7 @@ export default function AdminCalendarPage() {
 
   const [selectedBranchId, setSelectedBranchId] = useState('');
   const [selectedDate, setSelectedDate] = useState(todayICT());
+  const [walkInOpen, setWalkInOpen] = useState(false);
 
   // Auto-select first branch
   const branchId = selectedBranchId || branches?.[0]?.id || '';
@@ -138,28 +170,69 @@ export default function AdminCalendarPage() {
     return Array.from(seen.entries()).map(([id, name]) => ({ id, name }));
   }, [calendarItems]);
 
+  const selectedBranchName = branches?.find((b) => b.id === branchId)?.name;
+
   return (
     <div className="flex flex-col gap-4">
-      <PageHeader title="ปฏิทิน / Calendar" subtitle="ตาราง สนาม × เวลา / Courts × time grid" />
+      <PageHeader
+        title="ปฏิทิน / Calendar"
+        subtitle={
+          selectedBranchName
+            ? `${selectedBranchName} · ตาราง สนาม × เวลา / Courts × time grid`
+            : 'ตาราง สนาม × เวลา / Courts × time grid'
+        }
+        actions={
+          <>
+            <select
+              value={branchId}
+              onChange={(e) => setSelectedBranchId(e.target.value)}
+              className="rounded-card border border-line-300 bg-surface px-3 py-1.5 text-xs text-fg"
+            >
+              {branches?.map((b) => (
+                <option key={b.id} value={b.id}>{b.name}</option>
+              ))}
+            </select>
 
-      {/* Controls */}
-      <div className="flex flex-wrap gap-3">
-        <select
-          value={branchId}
-          onChange={(e) => setSelectedBranchId(e.target.value)}
-          className="rounded-card border border-line-300 bg-surface px-3 py-2 text-sm text-fg"
-        >
-          {branches?.map((b) => (
-            <option key={b.id} value={b.id}>{b.name}</option>
-          ))}
-        </select>
-        <input
-          type="date"
-          value={selectedDate}
-          onChange={(e) => setSelectedDate(e.target.value)}
-          className="rounded-card border border-line-300 bg-surface px-3 py-2 text-sm text-fg"
-        />
-      </div>
+            <div className="flex items-center gap-1 rounded-card border border-line-300 bg-surface px-1.5 py-1">
+              <button
+                type="button"
+                aria-label="วันก่อนหน้า / Previous day"
+                onClick={() => setSelectedDate((d) => shiftDate(d, -1))}
+                className="grid h-6 w-6 shrink-0 place-items-center rounded text-fg-muted hover:bg-surface-2 hover:text-fg"
+              >
+                ‹
+              </button>
+              <label className="sr-only" htmlFor="calendar-date">วันที่ / Date</label>
+              <input
+                id="calendar-date"
+                type="date"
+                title={formatDateNavLabel(selectedDate)}
+                value={selectedDate}
+                onChange={(e) => setSelectedDate(e.target.value)}
+                className="w-0 flex-1 min-w-[128px] border-none bg-transparent px-1 font-score text-xs text-fg focus:outline-none"
+              />
+              <button
+                type="button"
+                aria-label="วันถัดไป / Next day"
+                onClick={() => setSelectedDate((d) => shiftDate(d, 1))}
+                className="grid h-6 w-6 shrink-0 place-items-center rounded text-fg-muted hover:bg-surface-2 hover:text-fg"
+              >
+                ›
+              </button>
+            </div>
+
+            <Button type="button" variant="primary" size="sm" onClick={() => setWalkInOpen(true)}>
+              + จองหน้างาน / Walk-in booking
+            </Button>
+          </>
+        }
+      />
+
+      <WalkInModal
+        open={walkInOpen}
+        onClose={() => setWalkInOpen(false)}
+        initialBranchId={branchId}
+      />
 
       {/* Calendar grid */}
       {isLoading && (

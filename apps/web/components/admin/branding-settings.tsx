@@ -9,14 +9,16 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { ImageUploadField } from '@/components/admin/image-upload-field';
 
-const DEFAULT_COLOR = '#2563eb';
+// Matches --accent default in app/globals.css.
+const DEFAULT_COLOR = '#0c8c6a';
 
 /**
  * Tenant Branding editor (Design D15, PRD A8.2) — logo + accent color(s).
- * Same full-replace-singleton shape as the Config page: `PUT
- * /admin/branding` sends the whole `Branding` object.
+ * Folded into the Config page (nav: one "Config" item, not two) the same
+ * way RolesMatrix folded into admin-users — self-contained with its own
+ * load/save, rendered as an extra section rather than a separate route.
  */
-export default function AdminBrandingPage() {
+export function BrandingSettings() {
   const { data: branding, isLoading, isError } = useAdminBranding();
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const [primaryColor, setPrimaryColor] = useState<string | null>(null);
@@ -50,7 +52,7 @@ export default function AdminBrandingPage() {
   return (
     <div className="flex flex-col gap-4">
       <div>
-        <h1 className="text-lg font-semibold text-fg">แบรนด์ / Branding</h1>
+        <h2 className="text-sm font-semibold text-fg">แบรนด์ / Branding</h2>
         <p className="text-xs text-fg-muted">โลโก้และสีประจำสถานที่ให้บริการ / Venue logo and CI colors.</p>
       </div>
 

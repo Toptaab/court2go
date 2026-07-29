@@ -8,6 +8,7 @@ import { messageForError } from '@/lib/error';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { BookingStatusBadge } from '@/components/ui/badge';
+import { StepDots } from '@/components/booking/step-dots';
 
 /**
  * Booking review page (Design M6) — shown after hold creation.
@@ -87,9 +88,13 @@ export default function BookingReviewPage() {
 
   return (
     <div className="flex flex-col gap-5">
-      <h1 className="font-disp text-lg font-semibold text-fg">
-        สรุปการจอง / Booking Summary
-      </h1>
+      {/* Header with step indicator (Design M6 — Step 4/4) */}
+      <div className="flex items-center justify-between">
+        <h1 className="font-disp text-lg font-semibold text-fg">
+          สรุปการจอง / Review booking
+        </h1>
+        <StepDots total={4} current={4} />
+      </div>
 
       {/* Booking info card */}
       <Card>
@@ -127,106 +132,102 @@ export default function BookingReviewPage() {
         </CardContent>
       </Card>
 
-      {/* Price breakdown */}
+      {/* Price breakdown (Design M6 priceline/totrow pattern) */}
       <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm">ราคา / Price</CardTitle>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-2">
+        <CardContent className="flex flex-col gap-0 p-0">
           {/* Per-unit breakdown */}
           {booking.price.units.map((unit) => (
-            <div key={unit.index} className="flex justify-between text-xs">
-              <span className="text-fg-muted">
-                {unit.startTime} {unit.isPeak ? '(Peak)' : '(Base)'}
+            <div key={unit.index} className="flex items-center justify-between px-4 py-2 text-[12.5px]">
+              <span className="text-ink-700">
+                {unit.startTime}{' '}
+                <span className="font-mono text-[11.5px] text-ink-500">
+                  · {unit.isPeak ? 'peak' : 'base'}
+                </span>
               </span>
-              <span className="font-score text-fg">{formatTHB(unit.unitPrice)}</span>
+              <span className="font-mono font-semibold text-fg">{formatTHB(unit.unitPrice)}</span>
             </div>
           ))}
 
-          {/* Subtotal */}
-          <div className="flex justify-between border-t border-line-100 pt-2 text-sm">
-            <span className="text-fg-muted">รวม / Subtotal</span>
-            <span className="font-score text-fg">{formatTHB(booking.price.subtotal)}</span>
-          </div>
-
           {/* Promotion discount */}
           {hasPromo && booking.price.promotion && (
-            <div className="flex items-center justify-between text-sm">
+            <div className="flex items-center justify-between border-t border-line-100 px-4 py-2 text-[12.5px]">
               <div className="flex items-center gap-2">
                 <span className="text-status-ok">
-                  โปรโมชั่น / Promo: {booking.price.promotion.code}
+                  Promo: {booking.price.promotion.code}
                 </span>
                 <button
                   type="button"
                   onClick={handleRemovePromo}
                   disabled={removePromo.isPending}
-                  className="text-xs text-status-danger hover:underline"
+                  className="text-[11px] text-status-danger hover:underline"
                 >
                   ลบ / Remove
                 </button>
               </div>
-              <span className="font-score text-status-ok">
+              <span className="font-mono font-semibold text-status-ok">
                 −{formatTHB(booking.price.promotion.discountAmount)}
               </span>
             </div>
           )}
 
-          {/* Total */}
-          <div className="flex justify-between border-t border-line-100 pt-2 text-sm font-semibold">
-            <span className="text-fg">ยอดรวม / Total</span>
-            <span className="font-score text-lg text-accent">
+          {/* Total row */}
+          <div className="flex items-center justify-between border-t border-line-100 px-4 py-3">
+            <span className="text-sm font-semibold text-fg">Total due</span>
+            <span className="font-mono text-lg font-bold text-accent">
               {formatTHB(booking.price.total)}
             </span>
           </div>
         </CardContent>
       </Card>
 
-      {/* Promo code input (only if no promo applied yet) */}
+      {/* Promo code input (Design M6 inpgroup style) */}
       {!hasPromo && (
-        <Card>
-          <CardContent className="p-4">
-            <form onSubmit={handleApplyPromo} className="flex flex-col gap-3">
-              <label htmlFor="promo-code" className="text-sm font-medium text-fg">
-                โค้ดโปรโมชั่น / Promo code
-              </label>
-              <div className="flex gap-2">
-                <input
-                  id="promo-code"
-                  type="text"
-                  value={promoCode}
-                  onChange={(e) => setPromoCode(e.target.value.toUpperCase())}
-                  placeholder="กรอกโค้ด"
-                  maxLength={40}
-                  className="flex-1 rounded-card border border-line-300 bg-surface px-3 py-2 text-sm text-fg placeholder:text-ink-300 focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
-                />
-                <Button
-                  type="submit"
-                  variant="secondary"
-                  size="sm"
-                  disabled={applyPromo.isPending || !promoCode.trim()}
-                >
-                  {applyPromo.isPending ? '...' : 'ใช้ / Apply'}
-                </Button>
-              </div>
-              {promoError && (
-                <p className="text-xs text-status-danger">{promoError}</p>
-              )}
-            </form>
-          </CardContent>
-        </Card>
+        <form onSubmit={handleApplyPromo} className="flex flex-col gap-2">
+          <div className="flex gap-2">
+            <input
+              id="promo-code"
+              type="text"
+              value={promoCode}
+              onChange={(e) => setPromoCode(e.target.value.toUpperCase())}
+              placeholder="Add promo code"
+              maxLength={40}
+              className="flex-1 rounded-md border border-line-100 bg-surface px-3 py-3 font-mono text-sm text-fg placeholder:text-ink-300 focus:border-accent focus:outline-none focus:shadow-[0_0_0_3px_rgba(12,140,106,0.15)]"
+            />
+            <Button
+              type="submit"
+              variant="secondary"
+              size="md"
+              disabled={applyPromo.isPending || !promoCode.trim()}
+              className="px-4"
+            >
+              {applyPromo.isPending ? '...' : 'Apply'}
+            </Button>
+          </div>
+          {promoError && (
+            <p className="text-xs text-status-danger">{promoError}</p>
+          )}
+          <p className="text-xs text-ink-500">
+            Have a promo code? Apply it before you pay.
+          </p>
+        </form>
       )}
+
+      {/* Info banner (Design M6 banner b-info) */}
+      <div className="flex gap-2 rounded-md bg-status-info/5 px-3 py-3 text-[12.5px] text-status-info">
+        <span className="flex-none text-[15px]">ℹ</span>
+        <span>Sum of per-slot prices — each slot at its base or peak rate.</span>
+      </div>
 
       {/* Hold timer warning */}
       {booking.holdExpiresAt && (
         <p className="text-center text-xs text-status-warn">
-          การจับจองจะหมดเวลาอัตโนมัติ กรุณาดำเนินการต่อ /
-          Your hold will expire automatically. Please continue.
+          Slot held — please continue before it expires.
         </p>
       )}
 
-      {/* Continue button */}
-      <Button variant="primary" className="w-full" onClick={handleContinue}>
-        ดำเนินการต่อ / Continue
+      {/* Action bar (Design M6 actionbar) */}
+      <Button variant="primary" size="lg" className="w-full" onClick={handleContinue}>
+        Confirm & Pay
       </Button>
     </div>
   );

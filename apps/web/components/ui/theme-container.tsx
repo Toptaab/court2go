@@ -46,7 +46,7 @@ export function ThemeContainer({
     <div
       data-theme={theme}
       style={themedStyle}
-      className={cn('bg-bg text-fg', className)}
+      className={cn('bg-surface text-fg', className)}
       {...props}
     />
   );

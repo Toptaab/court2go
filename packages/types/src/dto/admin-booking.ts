@@ -8,6 +8,7 @@ import {
 } from '../common/index';
 import { paginationQuerySchema } from '../common/pagination';
 import { bookingStatusSchema, paymentStatusSchema } from '../enums/index';
+import { bookingListItemSchema } from './booking';
 
 /**
  * Admin booking list filters (PRD A2.1, D2). Branch Admins are additionally
@@ -37,6 +38,17 @@ export const adminCalendarQuerySchema = z.object({
   date: isoDateSchema,
 });
 export type AdminCalendarQuery = z.infer<typeof adminCalendarQuerySchema>;
+
+/**
+ * Calendar response item — `BookingListItem` plus `courtId`, which the
+ * calendar view needs to place each booking in its own court column
+ * (`courtName` alone isn't a safe grouping key — nothing stops two courts
+ * across branches, or in future same-branch data, from sharing a name).
+ */
+export const adminCalendarItemSchema = bookingListItemSchema.extend({
+  courtId: idSchema,
+});
+export type AdminCalendarItem = z.infer<typeof adminCalendarItemSchema>;
 
 /* ------------------------------------------------------------------ Walk-in create */
 

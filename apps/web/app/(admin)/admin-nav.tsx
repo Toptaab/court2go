@@ -61,16 +61,6 @@ function BookingsIcon(props: SVGProps<SVGSVGElement>) {
   );
 }
 
-function WalkInIcon(props: SVGProps<SVGSVGElement>) {
-  return (
-    <IconBase {...props}>
-      <path d="M16 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" />
-      <circle cx="8.5" cy="7" r="4" />
-      <path d="M20 8v6M23 11h-6" />
-    </IconBase>
-  );
-}
-
 function SlipIcon(props: SVGProps<SVGSVGElement>) {
   return (
     <IconBase {...props}>
@@ -150,35 +140,12 @@ function ConfigIcon(props: SVGProps<SVGSVGElement>) {
   );
 }
 
-/** Not in the mockup — picked from the same family for the Branding settings item (a palette). */
-function BrandingIcon(props: SVGProps<SVGSVGElement>) {
-  return (
-    <IconBase {...props}>
-      <path d="M12 22a10 10 0 110-20 8 8 0 018 8c0 2-1 3-3 3h-2a2 2 0 00-1 3.5 1.5 1.5 0 01-1 2.5H12z" />
-      <circle cx="7" cy="12" r="1" />
-      <circle cx="9" cy="8" r="1" />
-      <circle cx="14" cy="7" r="1" />
-      <circle cx="17" cy="11" r="1" />
-    </IconBase>
-  );
-}
-
 /** Not in the mockup — a shield, for the Admin Users (RBAC) settings item. */
 function AdminUsersIcon(props: SVGProps<SVGSVGElement>) {
   return (
     <IconBase {...props}>
       <path d="M12 3l8 3v6c0 5-3.5 8.5-8 9-4.5-.5-8-4-8-9V6l8-3z" />
       <path d="M9 12l2 2 4-4" />
-    </IconBase>
-  );
-}
-
-/** Not in the mockup — a key, for the Roles matrix settings item. */
-function RolesIcon(props: SVGProps<SVGSVGElement>) {
-  return (
-    <IconBase {...props}>
-      <circle cx="7" cy="15" r="3" />
-      <path d="M9.5 12.5L19 3M15 3h4v4" />
     </IconBase>
   );
 }
@@ -201,36 +168,33 @@ interface NavItem {
 }
 
 const OPS_ITEMS: NavItem[] = [
-  { href: '/admin', label: 'หน้าหลัก / Dashboard', roles: [], Icon: DashboardIcon },
-  { href: '/admin/calendar', label: 'ปฏิทิน / Calendar', roles: [], Icon: CalendarIcon },
-  { href: '/admin/bookings', label: 'การจอง / Bookings', roles: [], Icon: BookingsIcon },
-  { href: '/admin/walk-in', label: 'จองหน้างาน / Walk-in', roles: [], Icon: WalkInIcon },
-  { href: '/admin/payments', label: 'ตรวจสอบสลิป / Slip review', roles: [], Icon: SlipIcon },
-  { href: '/admin/cancellations', label: 'คำขอยกเลิก / Cancellations', roles: [], Icon: CancellationsIcon },
+  { href: '/admin', label: 'Dashboard', roles: [], Icon: DashboardIcon },
+  { href: '/admin/calendar', label: 'Calendar', roles: [], Icon: CalendarIcon },
+  { href: '/admin/bookings', label: 'Bookings', roles: [], Icon: BookingsIcon },
+  { href: '/admin/payments', label: 'Slip review', roles: [], Icon: SlipIcon },
+  { href: '/admin/cancellations', label: 'Cancellations', roles: [], Icon: CancellationsIcon },
 ];
 
 // Catalog + settings group (M10.9/M10.10). Branches/Sports/Promotions/News are
 // Owner/Admin-only (tenant-wide config, PRD A3.1/A4.1); Courts and Members
 // stay visible to Branch-Admins too (server enforces actual scope via 403
-// BRANCH_SCOPE_DENIED). Settings (Config/Branding/Admin Users/Roles) are all
+// BRANCH_SCOPE_DENIED). Settings (Config — includes Branding — /Admin Users/Roles) are all
 // Owner/Admin-only per PRD A8/A9 — a Branch-Admin never manages other admins
 // or tenant-wide settings.
 const MANAGE_ITEMS: NavItem[] = [
-  { href: '/admin/catalog/branches', label: 'สาขา / Branches', roles: ['OWNER', 'ADMIN'], Icon: BranchesIcon },
-  { href: '/admin/catalog/sports', label: 'กีฬา / Sports', roles: ['OWNER', 'ADMIN'], Icon: SportsIcon },
-  { href: '/admin/catalog/courts', label: 'สนาม / Courts', roles: [], Icon: CourtsIcon },
-  { href: '/admin/promotions', label: 'โปรโมชั่น / Promotions', roles: ['OWNER', 'ADMIN'], Icon: PromotionsIcon },
-  { href: '/admin/news', label: 'ข่าวสาร / News', roles: ['OWNER', 'ADMIN'], Icon: NewsIcon },
-  { href: '/admin/members', label: 'สมาชิก / Members', roles: [], Icon: MembersIcon },
-  { href: '/admin/settings/config', label: 'ตั้งค่าระบบ / Config', roles: ['OWNER', 'ADMIN'], Icon: ConfigIcon },
-  { href: '/admin/settings/branding', label: 'แบรนด์ / Branding', roles: ['OWNER', 'ADMIN'], Icon: BrandingIcon },
+  { href: '/admin/catalog/branches', label: 'Branches', roles: ['OWNER', 'ADMIN'], Icon: BranchesIcon },
+  { href: '/admin/catalog/sports', label: 'Sports', roles: ['OWNER', 'ADMIN'], Icon: SportsIcon },
+  { href: '/admin/catalog/courts', label: 'Courts', roles: [], Icon: CourtsIcon },
+  { href: '/admin/promotions', label: 'Promotions', roles: ['OWNER', 'ADMIN'], Icon: PromotionsIcon },
+  { href: '/admin/news', label: 'News', roles: ['OWNER', 'ADMIN'], Icon: NewsIcon },
+  { href: '/admin/members', label: 'Members', roles: [], Icon: MembersIcon },
+  { href: '/admin/settings/config', label: 'Config & Branding', roles: ['OWNER', 'ADMIN'], Icon: ConfigIcon },
   {
     href: '/admin/settings/admin-users',
-    label: 'ผู้ดูแล / Admin Users',
+    label: 'Admin Users',
     roles: ['OWNER', 'ADMIN'],
     Icon: AdminUsersIcon,
   },
-  { href: '/admin/settings/roles', label: 'สิทธิ์การใช้งาน / Roles', roles: ['OWNER', 'ADMIN'], Icon: RolesIcon },
 ];
 
 /**
@@ -269,7 +233,7 @@ export function AdminNav() {
           'flex items-center gap-2.5 rounded-card px-3 py-2 text-sm transition-colors',
           isActive
             ? 'bg-surface font-semibold text-fg shadow-sm'
-            : 'text-fg-muted hover:bg-surface-2 hover:text-fg',
+            : 'text-fg-muted hover:bg-surface hover:text-fg',
         )}
       >
         <item.Icon
@@ -294,7 +258,7 @@ export function AdminNav() {
       {manageVisible.length > 0 && (
         <>
           <p className="px-3 pb-1 pt-4 font-mono text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
-            จัดการ / Manage
+            Manage
           </p>
           <div className="flex flex-col gap-1">{manageVisible.map(renderItem)}</div>
         </>

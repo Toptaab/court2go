@@ -1,103 +1,189 @@
 'use client';
 
-import { useParams } from 'next/navigation';
-import Link from 'next/link';
+import { useState, useMemo } from 'react';
+import { useParams, useRouter } from 'next/navigation';
 import { useSports, useCourts } from '@/lib/hooks/use-public-catalog';
 import { getDevDefaultTenantSlug } from '@/lib/tenant';
-import { formatTHB } from '@/lib/format';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
+import { StepDots } from '@/components/booking/step-dots';
+import { Button } from '@/components/ui/button';
 
 /**
- * Sport list + courts for a branch (Design M4 → M5 transition).
- * Shows sports offered at this branch, and under each sport its courts
- * with grid interval + base price. Each court links to the court detail
- * (availability grid / slot picker).
+ * Sport selection — Design M4.
+ * Selectable rows showing sport name, court count, and price range.
+ * Step 2 of 4 in the booking flow.
  */
-export default function BranchSportsPage() {
-  const params = useParams<{ branchId: string }>();
+export default function SportSelectionPage() {
+  const { branchId } = useParams<{ branchId: string }>();
   const slug = getDevDefaultTenantSlug();
-  const { data: sports, isLoading: sportsLoading } = useSports(slug, params.branchId);
-  const { data: courts, isLoading: courtsLoading } = useCourts(slug, params.branchId);
+  const { data: sports, isLoading: sportsLoading, isError: sportsError } = useSports(slug, branchId);
+  const { data: courts, isLoading: courtsLoading } = useCourts(slug, branchId);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const router = useRouter();
 
   const isLoading = sportsLoading || courtsLoading;
 
+  // Derive court count and price range per sport from courts data
+  const sportMeta = useMemo(() => {
+    if (!courts) return {};
+    const map: Record<string, { courtCount: number; minPrice: number; maxPrice: number }> = {};
+    for (const court of courts) {
+      const existing = map[court.sportId];
+      if (existing) {
+        existing.courtCount += 1;
+        existing.minPrice = Math.min(existing.minPrice, court.basePricePerGridUnit);
+        existing.maxPrice = Math.max(existing.maxPrice, court.basePricePerGridUnit);
+      } else {
+        map[court.sportId] = {
+          courtCount: 1,
+          minPrice: court.basePricePerGridUnit,
+          maxPrice: court.basePricePerGridUnit,
+        };
+      }
+    }
+    return map;
+  }, [courts]);
+
+  const selectedSport = sports?.find((s) => s.id === selectedId);
+
+  function formatPrice(meta: { minPrice: number; maxPrice: number }) {
+    if (meta.minPrice === meta.maxPrice) {
+      return `฿${meta.minPrice}`;
+    }
+    return `฿${meta.minPrice}–${meta.maxPrice}`;
+  }
+
+  // Loading skeletons
   if (isLoading) {
     return (
-      <div className="flex flex-col gap-4">
-        <h1 className="font-disp text-lg font-semibold text-fg">กีฬา / Sports</h1>
-        {Array.from({ length: 3 }).map((_, i) => (
-          <div key={i} className="h-24 animate-pulse rounded-card bg-surface-2" />
-        ))}
+      <div className="flex flex-col">
+        {/* Header */}
+        <div className="flex items-center gap-3 border-b border-line px-4 py-3">
+          <div className="h-[38px] w-[38px] animate-pulse rounded-[10px] bg-surface-2" />
+          <div className="h-5 w-32 animate-pulse rounded bg-surface-2" />
+        </div>
+        {/* Body */}
+        <div className="flex flex-col gap-3 p-4">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="h-[72px] animate-pulse rounded-card bg-surface-2" />
+          ))}
+        </div>
       </div>
     );
   }
 
-  if (!sports || !courts) {
+  // Error state
+  if (sportsError || !sports) {
     return (
-      <div className="flex flex-col gap-3">
-        <Link href="/branches" className="text-sm text-accent hover:underline">
-          ← สาขาทั้งหมด / All branches
-        </Link>
-        <p className="text-sm text-fg-muted">
-          ไม่สามารถโหลดข้อมูลได้ / Unable to load data.
-        </p>
+      <div className="flex flex-col">
+        <div className="flex items-center gap-3 border-b border-line px-4 py-3">
+          <button
+            onClick={() => router.back()}
+            className="flex h-[38px] w-[38px] items-center justify-center rounded-[10px] border border-line bg-surface text-lg text-ink-700"
+            aria-label="Go back"
+          >
+            ←
+          </button>
+          <span className="text-base font-bold text-fg">Choose sport</span>
+        </div>
+        <div className="p-4">
+          <p className="text-sm text-fg-muted">
+            ไม่สามารถโหลดข้อมูลกีฬาได้ / Unable to load sports.
+          </p>
+        </div>
       </div>
     );
   }
 
-  // Group courts by sportId for display under each sport heading
-  const courtsBySport = new Map<string, typeof courts>();
-  for (const court of courts) {
-    const list = courtsBySport.get(court.sportId) ?? [];
-    list.push(court);
-    courtsBySport.set(court.sportId, list);
+  // Empty state
+  if (sports.length === 0) {
+    return (
+      <div className="flex flex-col">
+        <div className="flex items-center gap-3 border-b border-line px-4 py-3">
+          <button
+            onClick={() => router.back()}
+            className="flex h-[38px] w-[38px] items-center justify-center rounded-[10px] border border-line bg-surface text-lg text-ink-700"
+            aria-label="Go back"
+          >
+            ←
+          </button>
+          <span className="text-base font-bold text-fg">Choose sport</span>
+        </div>
+        <div className="p-4">
+          <p className="text-sm text-fg-muted">ไม่มีกีฬาในสาขานี้ / No sports available at this branch.</p>
+        </div>
+      </div>
+    );
   }
 
   return (
-    <div className="flex flex-col gap-5">
-      <Link href="/branches" className="text-sm text-accent hover:underline">
-        ← สาขาทั้งหมด / All branches
-      </Link>
+    <div className="flex min-h-[calc(100dvh-80px)] flex-col">
+      {/* App bar */}
+      <div className="flex items-center gap-3 border-b border-line px-4 py-3">
+        <button
+          onClick={() => router.back()}
+          className="flex h-[38px] w-[38px] items-center justify-center rounded-[10px] border border-line bg-surface text-lg text-ink-700"
+          aria-label="Go back"
+        >
+          ←
+        </button>
+        <span className="text-base font-bold text-fg">Choose sport</span>
+        <div className="ml-auto">
+          <StepDots total={4} current={2} />
+        </div>
+      </div>
 
-      <h1 className="font-disp text-lg font-semibold text-fg">เลือกสนาม / Choose a court</h1>
+      {/* Body — selectable rows */}
+      <div className="flex flex-1 flex-col gap-3 p-4">
+        {sports.map((sport) => {
+          const isSelected = sport.id === selectedId;
+          const meta = sportMeta[sport.id];
+          return (
+            <button
+              key={sport.id}
+              type="button"
+              onClick={() => setSelectedId(sport.id)}
+              className={`flex items-center gap-3 rounded-card border p-3.5 text-left transition-all ${
+                isSelected
+                  ? 'border-accent bg-accent-050 shadow-[0_0_0_1px_var(--accent)_inset]'
+                  : 'border-line bg-surface hover:border-ink-300'
+              }`}
+            >
+              <div className="min-w-0 flex-1">
+                <div className="text-[15px] font-semibold text-fg">
+                  {sport.name}
+                </div>
+                {meta && (
+                  <div className="mt-0.5 text-xs text-fg-muted">
+                    {meta.courtCount} court{meta.courtCount > 1 ? 's' : ''} · from {formatPrice(meta)}
+                  </div>
+                )}
+              </div>
+              {/* Sport icon placeholder */}
+              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-accent/10 text-sm text-accent">
+                🏸
+              </div>
+            </button>
+          );
+        })}
+      </div>
 
-      {sports.length === 0 && (
-        <p className="text-sm text-fg-muted">ไม่มีกีฬา / No sports available.</p>
-      )}
-
-      {sports.map((sport) => {
-        const sportCourts = courtsBySport.get(sport.id) ?? [];
-        return (
-          <section key={sport.id} className="flex flex-col gap-3">
-            <h2 className="text-sm font-semibold text-fg">{sport.name}</h2>
-
-            {sportCourts.length === 0 && (
-              <p className="text-xs text-fg-muted">ไม่มีสนาม / No courts.</p>
-            )}
-
-            {sportCourts.map((court) => (
-              <Link key={court.id} href={`/courts/${court.id}`}>
-                <Card className="transition-shadow hover:shadow-md">
-                  <CardHeader className="pb-1">
-                    <CardTitle className="text-sm">{court.name}</CardTitle>
-                    <CardDescription>
-                      {court.gridIntervalMinutes} นาที/ช่วง · สูงสุด {court.maxSlots} ช่วง
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <p className="font-score text-xs text-ink-500">
-                      เริ่มต้น {formatTHB(court.basePricePerGridUnit)} / ช่วง
-                    </p>
-                    <p className="text-xs text-fg-muted">
-                      From {formatTHB(court.basePricePerGridUnit)} / slot
-                    </p>
-                  </CardContent>
-                </Card>
-              </Link>
-            ))}
-          </section>
-        );
-      })}
+      {/* Bottom action bar */}
+      <div className="sticky bottom-0 border-t border-line bg-surface px-4 py-3">
+        <Button
+          className="w-full"
+          size="lg"
+          disabled={!selectedId}
+          onClick={() => {
+            if (selectedId) {
+              router.push(`/branches/${branchId}/sports/${selectedId}/courts`);
+            }
+          }}
+        >
+          {selectedSport
+            ? `Continue · ${selectedSport.name}`
+            : 'Select a sport'}
+        </Button>
+      </div>
     </div>
   );
 }

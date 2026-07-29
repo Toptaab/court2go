@@ -11,15 +11,18 @@ import { AdminNav } from './admin-nav';
  * Full-bleed desktop layout: fixed sidebar + fluid content area. The sidebar
  * is a full-height flex column (brandrow, then `<AdminNav />` filling the
  * rest via `flex-1`) so the nav's userchip can pin to the bottom with
- * `mt-auto`. The content column sits on `bg-paper`; the sidebar and topbar
- * stay on `bg-surface` (white) divided by the neutral `border-line-100`
- * line. Per-screen titles now live in each page's `<PageHeader>` — this
- * shell's topbar is just a thin neutral bar, no duplicate title.
+ * `mt-auto`. Per the mockup's `.shell` (`.side` = recessed `--surface-2`,
+ * `.main`/`.content` = unset → inherits `.win`'s white `--surface`), the
+ * sidebar is the tinted layer and the content column is white — NOT the
+ * other way round. This is what makes the active nav item's white pill +
+ * shadow pop against the sidebar. Per-screen titles live in each page's
+ * `<PageHeader>`, rendered directly at the top of `<main>` — per the
+ * mockup's `.main`, there's no separate shell-level topbar chrome above it.
  */
 export default function AdminLayout({ children }: { children: ReactNode }) {
   return (
-    <div className="flex min-h-screen bg-paper text-fg">
-      <aside className="hidden w-60 shrink-0 flex-col border-r border-line-100 bg-surface md:flex">
+    <div className="flex min-h-screen bg-surface text-fg">
+      <aside className="hidden w-60 shrink-0 flex-col border-r border-line-100 bg-surface-2 md:flex">
         <div className="flex items-center gap-2.5 px-4 py-5">
           <span className="grid h-7 w-7 shrink-0 place-items-center rounded-md bg-accent text-sm font-extrabold text-accent-ink">
             C
@@ -28,10 +31,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
         </div>
         <AdminNav />
       </aside>
-      <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex h-14 shrink-0 items-center border-b border-line-100 bg-surface px-6" />
-        <main className="flex-1 bg-paper p-6">{children}</main>
-      </div>
+      <main className="min-w-0 flex-1 bg-surface p-6">{children}</main>
     </div>
   );
 }

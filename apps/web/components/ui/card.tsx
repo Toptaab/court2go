@@ -1,13 +1,16 @@
 import type { HTMLAttributes } from 'react';
 import { cn } from '@/lib/utils';
 
-/** Token-driven card shell — `surface`/`line` tokens only, no raw hex. */
+/**
+ * Token-driven card shell — `surface`/`line` tokens only, no raw hex.
+ * Matches the mockup's `.panel` (`border:1px solid var(--line);
+ * background:var(--surface)`, no box-shadow) — the admin content column is
+ * white too, so a shadow would read as a floating card instead of the
+ * mockup's flush bordered panel.
+ */
 export function Card({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
   return (
-    <div
-      className={cn('rounded-card border border-line-100 bg-surface shadow-sm', className)}
-      {...props}
-    />
+    <div className={cn('rounded-card border border-line-100 bg-surface', className)} {...props} />
   );
 }
 

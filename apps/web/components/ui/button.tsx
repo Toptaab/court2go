@@ -10,7 +10,7 @@ import { cn } from '@/lib/utils';
  * re-skins every primary CTA, while `destructive` stays the fixed
  * `--status-danger` regardless of tenant.
  */
-const buttonVariants = cva(
+export const buttonVariants = cva(
   'inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-card text-sm font-medium ' +
     'transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 ' +
     'focus-visible:ring-accent disabled:pointer-events-none disabled:opacity-50',

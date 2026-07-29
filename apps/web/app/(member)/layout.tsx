@@ -1,5 +1,7 @@
 import type { ReactNode } from 'react';
 import { ThemeContainer } from '@/components/ui/theme-container';
+import { AppBar } from '@/components/app-bar';
+import { BottomTabBar } from '@/components/bottom-tab-bar';
 
 /**
  * Member (logged-in client) shell — same mobile-first column + tenant tint
@@ -9,16 +11,14 @@ import { ThemeContainer } from '@/components/ui/theme-container';
  * not). Visually identical shell today; the guard is the reason it's a
  * separate group.
  *
- * Placeholder page lives at `app/(member)/account/page.tsx` → `/account`
- * (not `/`, to avoid colliding with `(public)`'s root page — Next.js route
- * groups share the URL space of their parent, so two groups can't both
- * resolve `/`). `/account` is a reasonable placeholder for "my
- * bookings"/"profile" (M10.5/M10.4); free to rename once those slices land.
+ * Layout structure: AppBar (top fixed) → scrollable content → BottomTabBar (bottom fixed)
  */
 export default function MemberLayout({ children }: { children: ReactNode }) {
   return (
     <ThemeContainer className="mx-auto flex min-h-screen w-full max-w-md flex-col">
-      <main className="flex-1 px-4 pb-8 pt-6">{children}</main>
+      <AppBar />
+      <main className="flex-1 px-4 pb-16 pt-14">{children}</main>
+      <BottomTabBar />
     </ThemeContainer>
   );
 }
