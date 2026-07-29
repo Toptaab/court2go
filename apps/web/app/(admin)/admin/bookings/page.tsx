@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import type { BookingListItem } from '@repo/types';
 import { useAdminBookings } from '@/lib/hooks/use-admin-bookings';
 import { useBranches } from '@/lib/hooks/use-public-catalog';
 import { useAdminSports } from '@/lib/hooks/use-admin-catalog';
@@ -10,6 +11,7 @@ import { getDevDefaultTenantSlug } from '@/lib/tenant';
 import { formatIctDate, formatIctTime, formatTHB } from '@/lib/format';
 import { Button } from '@/components/ui/button';
 import { BookingStatusBadge, PaymentStatusBadge } from '@/components/ui/badge';
+import { PaginatedTable, type DataTableColumn } from '@/components/ui/paginated-list';
 import { PageHeader } from '@/components/admin/page-header';
 import { WalkInModal } from '@/components/admin/walk-in-modal';
 import { cn } from '@/lib/utils';
@@ -41,6 +43,45 @@ export default function AdminBookingsPage() {
     setActiveQuick((prev) => (prev === key ? null : key));
     setPage(1);
   };
+
+  const columns: DataTableColumn<BookingListItem>[] = [
+    {
+      header: 'Booking',
+      cell: (item) => (
+        <Link
+          href={`/admin/bookings/${item.id}`}
+          onClick={(e) => e.stopPropagation()}
+          className="font-mono text-xs font-semibold text-accent hover:underline"
+        >
+          #{item.id.slice(0, 8)}
+        </Link>
+      ),
+    },
+    {
+      header: 'Customer',
+      cell: (item) => (
+        <>
+          <div className="font-medium text-fg">{item.memberName ?? '—'}</div>
+          {item.memberPhone && <div className="font-mono text-xs text-fg-muted">{item.memberPhone}</div>}
+        </>
+      ),
+    },
+    { header: 'Court', cell: (item) => <span className="text-fg">{item.courtName} · {item.sportName}</span> },
+    {
+      header: 'When',
+      cell: (item) => (
+        <span className="font-score text-xs text-fg">
+          {formatIctDate(item.startsAt)} · {formatIctTime(item.startsAt)}–{formatIctTime(item.endsAt)}
+        </span>
+      ),
+    },
+    {
+      header: 'Amount',
+      cell: (item) => <span className="font-score text-sm font-semibold text-fg">{formatTHB(item.amountDue)}</span>,
+    },
+    { header: 'Booking status', cell: (item) => <BookingStatusBadge status={item.status} /> },
+    { header: 'Payment', cell: (item) => <PaymentStatusBadge status={item.paymentStatus} /> },
+  ];
 
   const { data, isLoading } = useAdminBookings({
     page,
@@ -174,95 +215,19 @@ export default function AdminBookingsPage() {
         </div>
       </div>
 
-      {/* Loading */}
-      {isLoading && (
-        <div className="flex flex-col gap-2">
-          {Array.from({ length: 6 }).map((_, i) => (
-            <div key={i} className="h-12 animate-pulse rounded-card bg-surface-2" />
-          ))}
-        </div>
-      )}
-
-      {/* Empty */}
-      {data && data.items.length === 0 && (
-        <p className="py-8 text-center text-sm text-fg-muted">
-          ไม่พบการจอง / No bookings found.
-        </p>
-      )}
-
-      {/* Table */}
-      {data && data.items.length > 0 && (
-        <div className="overflow-hidden overflow-x-auto rounded-card border border-line-100">
-          <table className="w-full min-w-[860px] border-collapse text-sm">
-            <thead>
-              <tr className="border-b border-line-100">
-                <th className="px-3 py-2 text-left font-mono text-[10px] font-semibold uppercase tracking-wider text-fg-muted">Booking</th>
-                <th className="px-3 py-2 text-left font-mono text-[10px] font-semibold uppercase tracking-wider text-fg-muted">Customer</th>
-                <th className="px-3 py-2 text-left font-mono text-[10px] font-semibold uppercase tracking-wider text-fg-muted">Court</th>
-                <th className="px-3 py-2 text-left font-mono text-[10px] font-semibold uppercase tracking-wider text-fg-muted">When</th>
-                <th className="px-3 py-2 text-left font-mono text-[10px] font-semibold uppercase tracking-wider text-fg-muted">Amount</th>
-                <th className="px-3 py-2 text-left font-mono text-[10px] font-semibold uppercase tracking-wider text-fg-muted">Booking status</th>
-                <th className="px-3 py-2 text-left font-mono text-[10px] font-semibold uppercase tracking-wider text-fg-muted">Payment</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-line-100">
-              {data.items.map((item) => (
-                <tr
-                  key={item.id}
-                  onClick={() => router.push(`/admin/bookings/${item.id}`)}
-                  className="cursor-pointer transition-colors hover:bg-surface-2"
-                >
-                  <td className="px-3 py-2.5">
-                    <Link
-                      href={`/admin/bookings/${item.id}`}
-                      onClick={(e) => e.stopPropagation()}
-                      className="font-mono text-xs font-semibold text-accent hover:underline"
-                    >
-                      #{item.id.slice(0, 8)}
-                    </Link>
-                  </td>
-                  <td className="px-3 py-2.5">
-                    <div className="font-medium text-fg">{item.memberName ?? '—'}</div>
-                    {item.memberPhone && (
-                      <div className="font-mono text-xs text-fg-muted">{item.memberPhone}</div>
-                    )}
-                  </td>
-                  <td className="px-3 py-2.5 text-fg">
-                    {item.courtName} · {item.sportName}
-                  </td>
-                  <td className="px-3 py-2.5 font-score text-xs text-fg">
-                    {formatIctDate(item.startsAt)} · {formatIctTime(item.startsAt)}–{formatIctTime(item.endsAt)}
-                  </td>
-                  <td className="px-3 py-2.5 font-score text-sm font-semibold text-fg">
-                    {formatTHB(item.amountDue)}
-                  </td>
-                  <td className="px-3 py-2.5">
-                    <BookingStatusBadge status={item.status} />
-                  </td>
-                  <td className="px-3 py-2.5">
-                    <PaymentStatusBadge status={item.paymentStatus} />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {/* Pagination */}
-      {data && (data.hasNextPage || page > 1) && (
-        <div className="flex items-center justify-between pt-2">
-          <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
-            ก่อนหน้า / Prev
-          </Button>
-          <span className="font-score text-xs text-fg-muted">
-            {page} / {Math.max(1, Math.ceil(data.total / data.pageSize))}
-          </span>
-          <Button variant="outline" size="sm" disabled={!data.hasNextPage} onClick={() => setPage((p) => p + 1)}>
-            ถัดไป / Next
-          </Button>
-        </div>
-      )}
+      <PaginatedTable
+        data={data}
+        isLoading={isLoading}
+        page={page}
+        onPageChange={setPage}
+        columns={columns}
+        keyOf={(item) => item.id}
+        onRowClick={(item) => router.push(`/admin/bookings/${item.id}`)}
+        emptyMessage="ไม่พบการจอง / No bookings found."
+        skeletonCount={6}
+        skeletonClassName="h-12"
+        minWidth="min-w-[860px]"
+      />
 
       <p className="text-xs text-fg-muted">
         Branch Admins เห็นเฉพาะสาขาของตน (ไม่มีตัวกรองสาขา) ส่วน Owner/Admin เห็นทุกสาขา / Branch Admins see this

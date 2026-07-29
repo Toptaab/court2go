@@ -7,6 +7,7 @@ import { formatIctDate, formatIctTime, formatTHB } from '@/lib/format';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { BookingStatusBadge } from '@/components/ui/badge';
+import { PaginatedList } from '@/components/ui/paginated-list';
 import { cn } from '@/lib/utils';
 
 type Scope = 'upcoming' | 'past' | 'all';
@@ -49,84 +50,57 @@ export function MyBookingsTab() {
         ))}
       </div>
 
-      {/* Loading */}
-      {isLoading && (
-        <div className="flex flex-col gap-3">
-          {Array.from({ length: 3 }).map((_, i) => (
-            <div key={i} className="h-24 animate-pulse rounded-card bg-surface-2" />
-          ))}
-        </div>
-      )}
-
-      {/* Empty state (Design M18 emptybox) */}
-      {data && data.items.length === 0 && (
-        <div className="flex flex-col items-center gap-3 rounded-lg border border-line-100 py-9 text-center">
-          <div className="flex h-[60px] w-[60px] items-center justify-center rounded-full bg-surface-2 text-[26px]">
-            📅
+      <PaginatedList
+        data={data}
+        isLoading={isLoading}
+        page={page}
+        onPageChange={setPage}
+        keyOf={(item) => item.id}
+        emptyMessage="No bookings yet"
+        empty={
+          <div className="flex flex-col items-center gap-3 rounded-lg border border-line-100 py-9 text-center">
+            <div className="flex h-[60px] w-[60px] items-center justify-center rounded-full bg-surface-2 text-[26px]">
+              📅
+            </div>
+            <h3 className="text-base font-semibold text-fg">No bookings yet</h3>
+            <p className="text-[13px] text-ink-500">
+              When you book a court it&apos;ll show up here.
+            </p>
+            <Link href="/branches">
+              <Button variant="primary" size="sm">
+                Book a court
+              </Button>
+            </Link>
           </div>
-          <h3 className="text-base font-semibold text-fg">No bookings yet</h3>
-          <p className="text-[13px] text-ink-500">
-            When you book a court it'll show up here.
-          </p>
-          <Link href="/branches">
-            <Button variant="primary" size="sm">
-              Book a court
-            </Button>
+        }
+        skeletonCount={3}
+        skeletonClassName="h-24"
+        renderItem={(item) => (
+          <Link href={`/bookings/${item.id}`}>
+            <Card className="transition-shadow hover:shadow-md">
+              <CardContent className="flex flex-col gap-2 p-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-semibold text-fg">
+                    {item.courtName}
+                  </span>
+                  <BookingStatusBadge status={item.status} />
+                </div>
+                <div className="text-xs text-fg-muted">
+                  {item.branchName} · {item.sportName}
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="font-score text-xs text-fg">
+                    {formatIctDate(item.startsAt)} · {formatIctTime(item.startsAt)} – {formatIctTime(item.endsAt)}
+                  </span>
+                  <span className="font-score text-sm font-semibold text-accent">
+                    {formatTHB(item.amountDue)}
+                  </span>
+                </div>
+              </CardContent>
+            </Card>
           </Link>
-        </div>
-      )}
-
-      {/* Booking list */}
-      {data?.items.map((item) => (
-        <Link key={item.id} href={`/bookings/${item.id}`}>
-          <Card className="transition-shadow hover:shadow-md">
-            <CardContent className="flex flex-col gap-2 p-4">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-semibold text-fg">
-                  {item.courtName}
-                </span>
-                <BookingStatusBadge status={item.status} />
-              </div>
-              <div className="text-xs text-fg-muted">
-                {item.branchName} · {item.sportName}
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="font-score text-xs text-fg">
-                  {formatIctDate(item.startsAt)} · {formatIctTime(item.startsAt)} – {formatIctTime(item.endsAt)}
-                </span>
-                <span className="font-score text-sm font-semibold text-accent">
-                  {formatTHB(item.amountDue)}
-                </span>
-              </div>
-            </CardContent>
-          </Card>
-        </Link>
-      ))}
-
-      {/* Pagination */}
-      {data && (data.hasNextPage || page > 1) && (
-        <div className="flex items-center justify-between pt-2">
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={page <= 1}
-            onClick={() => setPage((p) => p - 1)}
-          >
-            Prev
-          </Button>
-          <span className="font-score text-xs text-fg-muted">
-            {page} / {Math.ceil(data.total / data.pageSize)}
-          </span>
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={!data.hasNextPage}
-            onClick={() => setPage((p) => p + 1)}
-          >
-            Next
-          </Button>
-        </div>
-      )}
+        )}
+      />
     </div>
   );
 }

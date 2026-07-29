@@ -12,6 +12,7 @@ import { formatIctDate, formatIctTime, formatTHB } from '@/lib/format';
 import { messageForError } from '@/lib/error';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { PaymentStatusBadge } from '@/components/ui/badge';
+import { PaginatedList } from '@/components/ui/paginated-list';
 import { SlipViewer } from '@/components/admin/slip-viewer';
 import { PageHeader } from '@/components/admin/page-header';
 
@@ -41,43 +42,19 @@ export default function AdminPaymentsQueuePage() {
         }
       />
 
-      {isLoading && (
-        <div className="flex flex-col gap-3">
-          {Array.from({ length: 2 }).map((_, i) => (
-            <div key={i} className="h-64 animate-pulse rounded-card bg-surface-2" />
-          ))}
-        </div>
-      )}
-
-      {isError && (
-        <p className="text-sm text-status-danger">
-          เกิดข้อผิดพลาดในการโหลดข้อมูล / Failed to load the queue.
-        </p>
-      )}
-
-      {data && data.items.length === 0 && (
-        <p className="py-8 text-center text-sm text-fg-muted">
-          ไม่มีรายการรอตรวจสอบ / Nothing waiting for review.
-        </p>
-      )}
-
-      <div className="flex flex-col gap-4">
-        {data?.items.map((item) => <SlipReviewRow key={item.id} item={item} />)}
-      </div>
-
-      {data && (data.hasNextPage || page > 1) && (
-        <div className="flex items-center justify-between pt-2">
-          <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
-            ก่อนหน้า / Prev
-          </Button>
-          <span className="font-score text-xs text-fg-muted">
-            {page} / {Math.max(1, Math.ceil(data.total / data.pageSize))}
-          </span>
-          <Button variant="outline" size="sm" disabled={!data.hasNextPage} onClick={() => setPage((p) => p + 1)}>
-            ถัดไป / Next
-          </Button>
-        </div>
-      )}
+      <PaginatedList
+        data={data}
+        isLoading={isLoading}
+        isError={isError}
+        page={page}
+        onPageChange={setPage}
+        keyOf={(item) => item.id}
+        emptyMessage="ไม่มีรายการรอตรวจสอบ / Nothing waiting for review."
+        errorMessage="เกิดข้อผิดพลาดในการโหลดข้อมูล / Failed to load the queue."
+        skeletonCount={2}
+        skeletonClassName="h-64"
+        renderItem={(item) => <SlipReviewRow item={item} />}
+      />
     </div>
   );
 }
