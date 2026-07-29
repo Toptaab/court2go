@@ -10,6 +10,7 @@ import {
   adminRejectPaymentBodySchema,
   adminSetBookingOutcomeBodySchema,
   type AdminBookingListQuery,
+  type AdminCalendarItem,
   type AdminCalendarQuery,
   type AdminCancelBookingBody,
   type AdminCancellationDecisionBody,
@@ -52,7 +53,7 @@ export class AdminBookingsController {
   async calendar(
     @CurrentAdmin() admin: AdminAuthContext,
     @Query(new ZodValidationPipe(adminCalendarQuerySchema)) query: AdminCalendarQuery,
-  ): Promise<BookingListItem[]> {
+  ): Promise<AdminCalendarItem[]> {
     return this.service.calendar(admin.adminUser, query);
   }
 

@@ -1,7 +1,7 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
-import { bookingDetailSchema, bookingListItemSchema, paginated } from '@repo/types';
+import { adminCalendarItemSchema, bookingDetailSchema, bookingListItemSchema, paginated } from '@repo/types';
 import { z } from 'zod';
 import { apiFetch, toQueryString } from '../api-client';
 import { getDevDefaultTenantSlug } from '../tenant';
@@ -10,18 +10,10 @@ import { queryKeys } from './query-keys';
 // --- Schemas ---
 const paginatedAdminBookingsSchema = paginated(bookingListItemSchema);
 
-/** Calendar item — compact booking placed on the time grid. */
-const calendarItemSchema = z.object({
-  id: z.string().uuid(),
-  courtId: z.string().uuid(),
-  courtName: z.string(),
-  startsAt: z.string(),
-  endsAt: z.string(),
-  status: z.string(),
-  memberName: z.string().nullable(),
-  memberPhone: z.string().nullable(),
-});
-const calendarResponseSchema = z.array(calendarItemSchema);
+// Calendar response item shape (`AdminCalendarItem` — `BookingListItem` +
+// `courtId`) lives in @repo/types, not redefined locally (CLAUDE.md: never
+// redefine a contract type in an app).
+const calendarResponseSchema = z.array(adminCalendarItemSchema);
 
 /**
  * GET /admin/bookings — paginated admin booking list with filters.
@@ -31,6 +23,8 @@ export function useAdminBookings(params: {
   status?: string;
   paymentStatus?: string;
   branchId?: string;
+  sportId?: string;
+  courtId?: string;
   phone?: string;
   dateFrom?: string;
   dateTo?: string;

@@ -3,6 +3,7 @@ import {
   paginated,
   bookingListItemSchema,
   type AdminBookingListQuery,
+  type AdminCalendarItem,
   type AdminCalendarQuery,
   type AdminCancelBookingBody,
   type AdminCancellationDecisionBody,
@@ -79,14 +80,16 @@ export class AdminBookingsService {
     });
   }
 
-  async calendar(admin: AdminUser, query: AdminCalendarQuery): Promise<BookingListItem[]> {
+  async calendar(admin: AdminUser, query: AdminCalendarQuery): Promise<AdminCalendarItem[]> {
     const branchId = this.effectiveBranchId(admin, query.branchId) ?? query.branchId;
     assertBranchScope(admin, branchId);
     // ICT (UTC+7) local calendar day → UTC bounds (Thailand-only MVP, NFR9).
     const dayStart = new Date(`${query.date}T00:00:00+07:00`);
     const dayEnd = new Date(dayStart.getTime() + 86_400_000);
     const rows = await this.bookings.listForCalendar(branchId, dayStart, dayEnd);
-    return rows.map(mapToBookingListItem);
+    // `courtId` on top of `BookingListItem`'s fields — the calendar view needs
+    // it to place each booking in its own court column (see AdminCalendarItem).
+    return rows.map((row) => ({ ...mapToBookingListItem(row), courtId: row.courtId }));
   }
 
   async detail(admin: AdminUser, bookingId: string): Promise<BookingDetail> {

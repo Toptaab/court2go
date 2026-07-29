@@ -3,8 +3,8 @@ import type { ReactNode } from 'react';
 interface PageHeaderProps {
   /** Bilingual (Thai / English) screen title — H2, `font-disp` semibold. */
   title: string;
-  /** Optional muted subtitle line under the title (e.g. scope/context copy). */
-  subtitle?: string;
+  /** Optional muted subtitle line under the title (e.g. scope/context copy, or a status chip). */
+  subtitle?: ReactNode;
   /** Right-aligned actions slot (buttons, filter triggers, etc). */
   actions?: ReactNode;
 }

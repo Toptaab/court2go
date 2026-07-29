@@ -17,6 +17,7 @@
     "baseUrl": ".",
     "paths": {
       "@/*": ["./*"],
+      "@repo/domain": ["../../packages/domain/src/index.ts"],
       "@repo/types": ["../../packages/types/src/index.ts"],
       // Unused this slice — kept for parity with apps/api/tsconfig.json,
       // not a required import convention for apps/web.
