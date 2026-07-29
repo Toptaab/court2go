@@ -98,12 +98,12 @@
   --pill: 999px;
 
   /* --- type ---
-     system-ui FIRST so Latin glyphs render from the platform UI font; Noto
-     Sans Thai is the Thai-script fallback (never the primary — putting it
-     first made Latin text render from the Thai face, per mockup). */
+     Poppins (next/font var) FIRST for Latin glyphs; system-ui/Noto Sans Thai
+     stay as fallbacks — Noto Sans Thai never primary, putting it first made
+     Latin text render from the Thai face, per mockup. */
   --sans:
-    system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans Thai',
-    ui-sans-serif, sans-serif;
+    var(--font-poppins), system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
+    'Noto Sans Thai', ui-sans-serif, sans-serif;
   --disp: var(--sans);
   --mono: ui-monospace, 'SF Mono', 'Cascadia Code', 'Roboto Mono', Menlo, Consolas, monospace;
 }
