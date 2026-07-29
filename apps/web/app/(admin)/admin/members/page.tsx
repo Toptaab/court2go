@@ -48,7 +48,7 @@ export default function AdminMembersPage() {
 
       {data?.items.map((member) => (
         <Link key={member.id} href={`/admin/members/${member.id}`}>
-          <Card className="transition-shadow hover:shadow-md">
+          <Card className="transition-colors hover:bg-surface-2">
             <CardContent className="flex items-center justify-between gap-4 p-4">
               <div>
                 <div className="flex items-center gap-2">
