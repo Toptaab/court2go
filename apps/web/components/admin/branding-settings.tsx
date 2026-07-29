@@ -9,7 +9,8 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { ImageUploadField } from '@/components/admin/image-upload-field';
 
-const DEFAULT_COLOR = '#2563eb';
+// Matches --accent default in app/globals.css.
+const DEFAULT_COLOR = '#0c8c6a';
 
 /**
  * Tenant Branding editor (Design D15, PRD A8.2) — logo + accent color(s).
