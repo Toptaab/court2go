@@ -10,6 +10,7 @@ import { messageForError } from '@/lib/error';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { RolesMatrix } from '@/components/admin/roles-matrix';
 
 /**
  * AdminUser list (Design D16, PRD A9, ADR-0005). Owner/Admin-only screen
@@ -52,6 +53,8 @@ export default function AdminUsersPage() {
       {adminUsers?.map((au) => (
         <AdminUserRow key={au.id} adminUser={au} myRole={me?.role} branchName={branchName(au.branchId)} />
       ))}
+
+      <RolesMatrix />
     </div>
   );
 }

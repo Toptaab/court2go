@@ -173,16 +173,6 @@ function AdminUsersIcon(props: SVGProps<SVGSVGElement>) {
   );
 }
 
-/** Not in the mockup — a key, for the Roles matrix settings item. */
-function RolesIcon(props: SVGProps<SVGSVGElement>) {
-  return (
-    <IconBase {...props}>
-      <circle cx="7" cy="15" r="3" />
-      <path d="M9.5 12.5L19 3M15 3h4v4" />
-    </IconBase>
-  );
-}
-
 interface NavItem {
   href: string;
   label: string;
@@ -230,7 +220,6 @@ const MANAGE_ITEMS: NavItem[] = [
     roles: ['OWNER', 'ADMIN'],
     Icon: AdminUsersIcon,
   },
-  { href: '/admin/settings/roles', label: 'Roles', roles: ['OWNER', 'ADMIN'], Icon: RolesIcon },
 ];
 
 /**
