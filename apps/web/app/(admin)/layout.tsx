@@ -15,9 +15,9 @@ import { AdminNav } from './admin-nav';
  * `.main`/`.content` = unset → inherits `.win`'s white `--surface`), the
  * sidebar is the tinted layer and the content column is white — NOT the
  * other way round. This is what makes the active nav item's white pill +
- * shadow pop against the sidebar. Per-screen titles now live in each page's
- * `<PageHeader>` — this shell's topbar is just a thin neutral bar, no
- * duplicate title.
+ * shadow pop against the sidebar. Per-screen titles live in each page's
+ * `<PageHeader>`, rendered directly at the top of `<main>` — per the
+ * mockup's `.main`, there's no separate shell-level topbar chrome above it.
  */
 export default function AdminLayout({ children }: { children: ReactNode }) {
   return (
@@ -31,10 +31,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
         </div>
         <AdminNav />
       </aside>
-      <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex h-14 shrink-0 items-center border-b border-line-100 bg-surface px-6" />
-        <main className="flex-1 bg-surface p-6">{children}</main>
-      </div>
+      <main className="min-w-0 flex-1 bg-surface p-6">{children}</main>
     </div>
   );
 }
