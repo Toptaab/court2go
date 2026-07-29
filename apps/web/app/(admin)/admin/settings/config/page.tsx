@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
+import { BrandingSettings } from '@/components/admin/branding-settings';
 
 /**
  * Tenant Config editor (Design D14, PRD A8.1) — a full-replace singleton:
@@ -222,6 +223,10 @@ export default function AdminConfigPage() {
           </div>
         </>
       )}
+
+      <hr className="border-line-100" />
+
+      <BrandingSettings />
     </div>
   );
 }

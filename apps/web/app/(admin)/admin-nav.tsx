@@ -140,19 +140,6 @@ function ConfigIcon(props: SVGProps<SVGSVGElement>) {
   );
 }
 
-/** Not in the mockup — picked from the same family for the Branding settings item (a palette). */
-function BrandingIcon(props: SVGProps<SVGSVGElement>) {
-  return (
-    <IconBase {...props}>
-      <path d="M12 22a10 10 0 110-20 8 8 0 018 8c0 2-1 3-3 3h-2a2 2 0 00-1 3.5 1.5 1.5 0 01-1 2.5H12z" />
-      <circle cx="7" cy="12" r="1" />
-      <circle cx="9" cy="8" r="1" />
-      <circle cx="14" cy="7" r="1" />
-      <circle cx="17" cy="11" r="1" />
-    </IconBase>
-  );
-}
-
 /** Not in the mockup — a shield, for the Admin Users (RBAC) settings item. */
 function AdminUsersIcon(props: SVGProps<SVGSVGElement>) {
   return (
@@ -191,7 +178,7 @@ const OPS_ITEMS: NavItem[] = [
 // Catalog + settings group (M10.9/M10.10). Branches/Sports/Promotions/News are
 // Owner/Admin-only (tenant-wide config, PRD A3.1/A4.1); Courts and Members
 // stay visible to Branch-Admins too (server enforces actual scope via 403
-// BRANCH_SCOPE_DENIED). Settings (Config/Branding/Admin Users/Roles) are all
+// BRANCH_SCOPE_DENIED). Settings (Config — includes Branding — /Admin Users/Roles) are all
 // Owner/Admin-only per PRD A8/A9 — a Branch-Admin never manages other admins
 // or tenant-wide settings.
 const MANAGE_ITEMS: NavItem[] = [
@@ -201,8 +188,7 @@ const MANAGE_ITEMS: NavItem[] = [
   { href: '/admin/promotions', label: 'Promotions', roles: ['OWNER', 'ADMIN'], Icon: PromotionsIcon },
   { href: '/admin/news', label: 'News', roles: ['OWNER', 'ADMIN'], Icon: NewsIcon },
   { href: '/admin/members', label: 'Members', roles: [], Icon: MembersIcon },
-  { href: '/admin/settings/config', label: 'Config', roles: ['OWNER', 'ADMIN'], Icon: ConfigIcon },
-  { href: '/admin/settings/branding', label: 'Branding', roles: ['OWNER', 'ADMIN'], Icon: BrandingIcon },
+  { href: '/admin/settings/config', label: 'Config & Branding', roles: ['OWNER', 'ADMIN'], Icon: ConfigIcon },
   {
     href: '/admin/settings/admin-users',
     label: 'Admin Users',
