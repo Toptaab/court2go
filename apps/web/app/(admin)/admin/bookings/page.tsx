@@ -11,6 +11,7 @@ import { formatIctDate, formatIctTime, formatTHB } from '@/lib/format';
 import { Button } from '@/components/ui/button';
 import { BookingStatusBadge, PaymentStatusBadge } from '@/components/ui/badge';
 import { PageHeader } from '@/components/admin/page-header';
+import { WalkInModal } from '@/components/admin/walk-in-modal';
 import { cn } from '@/lib/utils';
 
 /**
@@ -31,6 +32,7 @@ export default function AdminBookingsPage() {
   const [dateFrom, setDateFrom] = useState<string | undefined>();
   const [dateTo, setDateTo] = useState<string | undefined>();
   const [phoneFilter, setPhoneFilter] = useState('');
+  const [walkInOpen, setWalkInOpen] = useState(false);
 
   const { data: branches } = useBranches(slug);
   const { data: sports } = useAdminSports();
@@ -65,9 +67,9 @@ export default function AdminBookingsPage() {
             <Button type="button" variant="outline" size="sm">
               ส่งออก / Export
             </Button>
-            <Link href="/admin/walk-in">
-              <Button type="button" variant="primary" size="sm">+ จองหน้างาน / Walk-in booking</Button>
-            </Link>
+            <Button type="button" variant="primary" size="sm" onClick={() => setWalkInOpen(true)}>
+              + จองหน้างาน / Walk-in booking
+            </Button>
           </>
         }
       />
@@ -266,6 +268,8 @@ export default function AdminBookingsPage() {
         Branch Admins เห็นเฉพาะสาขาของตน (ไม่มีตัวกรองสาขา) ส่วน Owner/Admin เห็นทุกสาขา / Branch Admins see this
         list locked to their branch (no branch filter). Owner/Admin see all branches.
       </p>
+
+      <WalkInModal open={walkInOpen} onClose={() => setWalkInOpen(false)} />
     </div>
   );
 }

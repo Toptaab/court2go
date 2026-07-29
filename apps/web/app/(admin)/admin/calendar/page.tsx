@@ -9,6 +9,7 @@ import { formatBilingual, type Bilingual } from '@/lib/copy';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { PageHeader } from '@/components/admin/page-header';
+import { WalkInModal } from '@/components/admin/walk-in-modal';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
 
@@ -140,6 +141,7 @@ export default function AdminCalendarPage() {
 
   const [selectedBranchId, setSelectedBranchId] = useState('');
   const [selectedDate, setSelectedDate] = useState(todayICT());
+  const [walkInOpen, setWalkInOpen] = useState(false);
 
   // Auto-select first branch
   const branchId = selectedBranchId || branches?.[0]?.id || '';
@@ -219,11 +221,17 @@ export default function AdminCalendarPage() {
               </button>
             </div>
 
-            <Link href="/admin/walk-in">
-              <Button type="button" variant="primary" size="sm">+ จองหน้างาน / Walk-in booking</Button>
-            </Link>
+            <Button type="button" variant="primary" size="sm" onClick={() => setWalkInOpen(true)}>
+              + จองหน้างาน / Walk-in booking
+            </Button>
           </>
         }
+      />
+
+      <WalkInModal
+        open={walkInOpen}
+        onClose={() => setWalkInOpen(false)}
+        initialBranchId={branchId}
       />
 
       {/* Calendar grid */}

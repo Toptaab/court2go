@@ -61,16 +61,6 @@ function BookingsIcon(props: SVGProps<SVGSVGElement>) {
   );
 }
 
-function WalkInIcon(props: SVGProps<SVGSVGElement>) {
-  return (
-    <IconBase {...props}>
-      <path d="M16 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" />
-      <circle cx="8.5" cy="7" r="4" />
-      <path d="M20 8v6M23 11h-6" />
-    </IconBase>
-  );
-}
-
 function SlipIcon(props: SVGProps<SVGSVGElement>) {
   return (
     <IconBase {...props}>
@@ -194,7 +184,6 @@ const OPS_ITEMS: NavItem[] = [
   { href: '/admin', label: 'Dashboard', roles: [], Icon: DashboardIcon },
   { href: '/admin/calendar', label: 'Calendar', roles: [], Icon: CalendarIcon },
   { href: '/admin/bookings', label: 'Bookings', roles: [], Icon: BookingsIcon },
-  { href: '/admin/walk-in', label: 'Walk-in', roles: [], Icon: WalkInIcon },
   { href: '/admin/payments', label: 'Slip review', roles: [], Icon: SlipIcon },
   { href: '/admin/cancellations', label: 'Cancellations', roles: [], Icon: CancellationsIcon },
 ];
