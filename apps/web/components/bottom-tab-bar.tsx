@@ -27,8 +27,8 @@ const tabs = [
   },
   {
     label: "Booking",
-    href: "/bookings",
-    matchPrefix: ["/bookings"],
+    href: "/branches",
+    matchPrefix: ["/branches", "/courts", "/booking"],
     icon: (active: boolean) => (
       <svg
         width="22"
